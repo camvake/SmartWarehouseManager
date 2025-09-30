@@ -1,170 +1,151 @@
-﻿using System;
+﻿using SWM.Core.Models;
+using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
-using SWM.Core.Models;
 
 namespace SWM.Data.Repositories
 {
-    public class UserRepository
+    public class UserRepository : BaseRepository
     {
-        private readonly string _connectionString;
+        public UserRepository(string connectionString) : base(connectionString) { }
 
-        public UserRepository(string connectionString)
+        public User GetById(int userId)
         {
-            _connectionString = connectionString;
-        }
+            var sql = @"
+                SELECT u.*, w.WarehouseName 
+                FROM Users u 
+                LEFT JOIN Warehouses w ON u.WarehouseID = w.WarehouseID 
+                WHERE u.UserID = @UserID";
 
-        public List<User> GetAllUsers()
-        {
-            var users = new List<User>();
-
-            try
+            using (var reader = ExecuteReader(sql, new SQLiteParameter("@UserID", userId)))
             {
-                using (var connection = new SQLiteConnection(_connectionString))
+                if (reader.Read())
                 {
-                    connection.Open();
-                    var query = "SELECT * FROM Users ORDER BY IsActive DESC, LastName, FirstName";
-
-                    using (var command = new SQLiteCommand(query, connection))
-                    using (var reader = command.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            var user = new User
-                            {
-                                UserID = GetInt(reader, "UserID"),
-                                Login = GetString(reader, "Login"),
-                                FirstName = GetString(reader, "FirstName"),
-                                LastName = GetString(reader, "LastName"),
-                                Email = GetString(reader, "Email"),
-                                PhoneNumber = GetString(reader, "PhoneNumber"),
-                                Role = (UserRole)GetInt(reader, "Role"),
-                                IsActive = GetBool(reader, "IsActive"),
-                                DateCreated = GetDateTime(reader, "DateCreated")
-                            };
-
-                            users.Add(user);
-                        }
-                    }
+                    return MapUser(reader);
                 }
             }
-            catch (Exception ex)
-            {
-                throw new Exception($"Ошибка загрузки пользователей: {ex.Message}");
-            }
+            return null;
+        }
 
+        public User GetByLogin(string login)
+        {
+            var sql = @"
+                SELECT u.*, w.WarehouseName 
+                FROM Users u 
+                LEFT JOIN Warehouses w ON u.WarehouseID = w.WarehouseID 
+                WHERE u.Login = @Login AND u.IsActive = 1";
+
+            using (var reader = ExecuteReader(sql, new SQLiteParameter("@Login", login)))
+            {
+                if (reader.Read())
+                {
+                    return MapUser(reader);
+                }
+            }
+            return null;
+        }
+
+        public List<User> GetAll()
+        {
+            var users = new List<User>();
+            var sql = @"
+                SELECT u.*, w.WarehouseName 
+                FROM Users u 
+                LEFT JOIN Warehouses w ON u.WarehouseID = w.WarehouseID 
+                WHERE u.IsActive = 1 
+                ORDER BY u.LastName, u.FirstName";
+
+            using (var reader = ExecuteReader(sql))
+            {
+                while (reader.Read())
+                {
+                    users.Add(MapUser(reader));
+                }
+            }
             return users;
         }
 
-        public void CreateUser(User user)
+        public int Create(User user)
         {
-            using (var connection = new SQLiteConnection(_connectionString))
+            var sql = @"
+                INSERT INTO Users (Login, Email, PasswordHash, PasswordSalt, FirstName, LastName, 
+                                 PhoneNumber, RoleID, WarehouseID, IsActive)
+                VALUES (@Login, @Email, @PasswordHash, @PasswordSalt, @FirstName, @LastName,
+                       @PhoneNumber, @RoleID, @WarehouseID, 1);
+                SELECT last_insert_rowid();";
+
+            var parameters = new[]
             {
-                connection.Open();
-                var query = @"INSERT INTO Users 
-                            (Login, PasswordHash, FirstName, LastName, Email, PhoneNumber, Role, IsActive, DateCreated) 
-                            VALUES 
-                            (@Login, @PasswordHash, @FirstName, @LastName, @Email, @PhoneNumber, @Role, @IsActive, @DateCreated)";
+                new SQLiteParameter("@Login", user.Login),
+                new SQLiteParameter("@Email", user.Email),
+                new SQLiteParameter("@PasswordHash", user.PasswordHash),
+                new SQLiteParameter("@PasswordSalt", user.PasswordSalt),
+                new SQLiteParameter("@FirstName", user.FirstName),
+                new SQLiteParameter("@LastName", user.LastName),
+                new SQLiteParameter("@PhoneNumber", user.PhoneNumber ?? (object)DBNull.Value),
+                new SQLiteParameter("@RoleID", (int)user.Role),
+                new SQLiteParameter("@WarehouseID", user.WarehouseID ?? (object)DBNull.Value)
+            };
 
-                using (var command = new SQLiteCommand(query, connection))
-                {
-                    command.Parameters.AddWithValue("@Login", user.Login);
-                    command.Parameters.AddWithValue("@PasswordHash", user.PasswordHash);
-                    command.Parameters.AddWithValue("@FirstName", user.FirstName);
-                    command.Parameters.AddWithValue("@LastName", user.LastName);
-                    command.Parameters.AddWithValue("@Email", user.Email);
-                    command.Parameters.AddWithValue("@PhoneNumber", user.PhoneNumber ?? "");
-                    command.Parameters.AddWithValue("@Role", (int)user.Role);
-                    command.Parameters.AddWithValue("@IsActive", user.IsActive);
-                    command.Parameters.AddWithValue("@DateCreated", DateTime.Now);
-
-                    command.ExecuteNonQuery();
-                }
-            }
+            return Convert.ToInt32(ExecuteScalar(sql, parameters));
         }
 
-        public void UpdateUser(User user)
+        public void Update(User user)
         {
-            using (var connection = new SQLiteConnection(_connectionString))
+            var sql = @"
+                UPDATE Users 
+                SET Login = @Login, Email = @Email, FirstName = @FirstName, LastName = @LastName,
+                    PhoneNumber = @PhoneNumber, RoleID = @RoleID, WarehouseID = @WarehouseID,
+                    UpdatedDate = CURRENT_TIMESTAMP
+                WHERE UserID = @UserID";
+
+            var parameters = new[]
             {
-                connection.Open();
-                var query = @"UPDATE Users SET 
-                            FirstName = @FirstName, LastName = @LastName, Email = @Email, 
-                            PhoneNumber = @PhoneNumber, Role = @Role, IsActive = @IsActive 
-                            WHERE UserID = @UserID";
+                new SQLiteParameter("@Login", user.Login),
+                new SQLiteParameter("@Email", user.Email),
+                new SQLiteParameter("@FirstName", user.FirstName),
+                new SQLiteParameter("@LastName", user.LastName),
+                new SQLiteParameter("@PhoneNumber", user.PhoneNumber ?? (object)DBNull.Value),
+                new SQLiteParameter("@RoleID", (int)user.Role),
+                new SQLiteParameter("@WarehouseID", user.WarehouseID ?? (object)DBNull.Value),
+                new SQLiteParameter("@UserID", user.UserID)
+            };
 
-                using (var command = new SQLiteCommand(query, connection))
-                {
-                    command.Parameters.AddWithValue("@UserID", user.UserID);
-                    command.Parameters.AddWithValue("@FirstName", user.FirstName);
-                    command.Parameters.AddWithValue("@LastName", user.LastName);
-                    command.Parameters.AddWithValue("@Email", user.Email);
-                    command.Parameters.AddWithValue("@PhoneNumber", user.PhoneNumber ?? "");
-                    command.Parameters.AddWithValue("@Role", (int)user.Role);
-                    command.Parameters.AddWithValue("@IsActive", user.IsActive);
-
-                    command.ExecuteNonQuery();
-                }
-            }
+            ExecuteNonQuery(sql, parameters);
         }
 
-        public void DeleteUser(int userId)
+        public void Delete(int userId)
         {
-            using (var connection = new SQLiteConnection(_connectionString))
+            var sql = "UPDATE Users SET IsActive = 0, UpdatedDate = CURRENT_TIMESTAMP WHERE UserID = @UserID";
+            ExecuteNonQuery(sql, new SQLiteParameter("@UserID", userId));
+        }
+
+        public void UpdateLastLogin(int userId)
+        {
+            var sql = "UPDATE Users SET LastLoginDate = CURRENT_TIMESTAMP WHERE UserID = @UserID";
+            ExecuteNonQuery(sql, new SQLiteParameter("@UserID", userId));
+        }
+
+        private User MapUser(SQLiteDataReader reader)
+        {
+            return new User
             {
-                connection.Open();
-                var query = "UPDATE Users SET IsActive = 0 WHERE UserID = @UserID";
-
-                using (var command = new SQLiteCommand(query, connection))
-                {
-                    command.Parameters.AddWithValue("@UserID", userId);
-                    command.ExecuteNonQuery();
-                }
-            }
-        }
-
-        public bool LoginExists(string login)
-        {
-            using (var connection = new SQLiteConnection(_connectionString))
-            {
-                connection.Open();
-                var query = "SELECT COUNT(*) FROM Users WHERE Login = @Login";
-
-                using (var command = new SQLiteCommand(query, connection))
-                {
-                    command.Parameters.AddWithValue("@Login", login);
-                    var count = Convert.ToInt32(command.ExecuteScalar());
-                    return count > 0;
-                }
-            }
-        }
-
-        // Вспомогательные методы для безопасного чтения данных
-        private int GetInt(SQLiteDataReader reader, string column)
-        {
-            var ordinal = reader.GetOrdinal(column);
-            return reader.IsDBNull(ordinal) ? 0 : reader.GetInt32(ordinal);
-        }
-
-        private string GetString(SQLiteDataReader reader, string column)
-        {
-            var ordinal = reader.GetOrdinal(column);
-            return reader.IsDBNull(ordinal) ? "" : reader.GetString(ordinal);
-        }
-
-        private bool GetBool(SQLiteDataReader reader, string column)
-        {
-            var ordinal = reader.GetOrdinal(column);
-            if (reader.IsDBNull(ordinal)) return false;
-
-            var value = reader.GetValue(ordinal);
-            return value.ToString() == "1" || value.ToString().ToLower() == "true";
-        }
-
-        private DateTime GetDateTime(SQLiteDataReader reader, string column)
-        {
-            var ordinal = reader.GetOrdinal(column);
-            return reader.IsDBNull(ordinal) ? DateTime.MinValue : reader.GetDateTime(ordinal);
+                UserID = Convert.ToInt32(reader["UserID"]),
+                Login = reader["Login"].ToString(),
+                Email = reader["Email"].ToString(),
+                PasswordHash = reader["PasswordHash"].ToString(),
+                PasswordSalt = reader["PasswordSalt"].ToString(),
+                FirstName = reader["FirstName"].ToString(),
+                LastName = reader["LastName"].ToString(),
+                PhoneNumber = reader["PhoneNumber"]?.ToString(),
+                Role = (UserRole)Convert.ToInt32(reader["RoleID"]),
+                WarehouseID = reader["WarehouseID"] != DBNull.Value ? Convert.ToInt32(reader["WarehouseID"]) : null,
+                LastLoginDate = reader["LastLoginDate"] != DBNull.Value ? Convert.ToDateTime(reader["LastLoginDate"]) : null,
+                CreatedDate = Convert.ToDateTime(reader["CreatedDate"]),
+                UpdatedDate = Convert.ToDateTime(reader["UpdatedDate"]),
+                IsActive = Convert.ToBoolean(reader["IsActive"]),
+                Warehouse = reader["WarehouseName"] != DBNull.Value ? new Warehouse { WarehouseName = reader["WarehouseName"].ToString() } : null
+            };
         }
     }
 }

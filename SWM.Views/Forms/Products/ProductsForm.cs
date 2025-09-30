@@ -1,194 +1,247 @@
+ï»¿using System;
+using System.Drawing;
 using System.Windows.Forms;
 using SWM.ViewModels;
-using System;
-using System.Drawing;
+using SWM.Core.Models;
 
-namespace SWM.Views.Forms.Product
+public class ProductsForm : BaseForm
 {
-    public class ProductsForm : Form
+    private ProductViewModel _viewModel;
+    private DataGridView productsGrid;
+    private ModernButton addButton;
+    private ModernButton editButton;
+    private ModernButton deleteButton;
+    private ModernButton refreshButton;
+    private System.Windows.Forms.TextBox searchTextBox;
+    private CheckBox lowStockCheckBox;
+
+    public ProductsForm(string connectionString)
     {
-        private ProductViewModel _viewModel;
-        private DataGridView dataGridViewProducts;
-        private Button btnAdd;
+        _viewModel = new ProductViewModel(connectionString);
+        InitializeComponent();
+        BindData();
+    }
 
-        public ProductsForm(string connectionString)
+    private void InitializeComponent()
+    {
+        this.Size = new Size(980, 740);
+        this.BackColor = Color.FromArgb(250, 250, 250);
+
+        // Ð—Ð°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº
+        var titleLabel = new Label();
+        titleLabel.Text = "Ð£Ð¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð¸Ðµ Ñ‚Ð¾Ð²Ð°Ñ€Ð°Ð¼Ð¸";
+        titleLabel.Font = new Font("Segoe UI", 20, FontStyle.Bold);
+        titleLabel.ForeColor = Color.FromArgb(60, 60, 60);
+        titleLabel.Location = new Point(30, 30);
+        titleLabel.AutoSize = true;
+        this.Controls.Add(titleLabel);
+
+        // ÐŸÐ°Ð½ÐµÐ»ÑŒ Ð¸Ð½ÑÑ‚Ñ€ÑƒÐ¼ÐµÐ½Ñ‚Ð¾Ð²
+        var toolbarPanel = new Panel();
+        toolbarPanel.Size = new Size(920, 50);
+        toolbarPanel.Location = new Point(30, 80);
+        toolbarPanel.BackColor = Color.White;
+        this.Controls.Add(toolbarPanel);
+
+        // ÐŸÐ¾Ð¸ÑÐº
+        searchTextBox = new System.Windows.Forms.TextBox();
+        searchTextBox.Size = new Size(200, 30);
+        searchTextBox.Location = new Point(10, 10);
+        searchTextBox.Font = new Font("Segoe UI", 9);
+        searchTextBox.PlaceholderText = "ÐŸÐ¾Ð¸ÑÐº Ñ‚Ð¾Ð²Ð°Ñ€Ð¾Ð²...";
+        searchTextBox.BorderStyle = BorderStyle.FixedSingle;
+        searchTextBox.TextChanged += (s, e) =>
         {
-            // Óáåäèñü, ÷òî íåò ôàéëà ProductsForm.Designer.cs
-            InitializeComponent();
-            _viewModel = new ProductViewModel(connectionString);
-            SetupDataGrid();
-            LoadProducts();
-        }
+            _viewModel.SearchText = searchTextBox.Text;
+            _viewModel.SearchProductsCommand.Execute(null);
+        };
+        toolbarPanel.Controls.Add(searchTextBox);
 
-        private void InitializeComponent()
+        // Ð§ÐµÐºÐ±Ð¾ÐºÑ Ð½Ð¸Ð·ÐºÐ¾Ð³Ð¾ Ð·Ð°Ð¿Ð°ÑÐ°
+        lowStockCheckBox = new CheckBox();
+        lowStockCheckBox.Text = "Ð¢Ð¾Ð»ÑŒÐºÐ¾ Ð½Ð¸Ð·ÐºÐ¸Ð¹ Ð·Ð°Ð¿Ð°Ñ";
+        lowStockCheckBox.Location = new Point(220, 12);
+        lowStockCheckBox.Font = new Font("Segoe UI", 9);
+        lowStockCheckBox.CheckedChanged += (s, e) => _viewModel.ShowLowStockOnly = lowStockCheckBox.Checked;
+        toolbarPanel.Controls.Add(lowStockCheckBox);
+
+        // ÐšÐ½Ð¾Ð¿ÐºÐ¸
+        addButton = new ModernButton();
+        addButton.Text = "âž• Ð”Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ";
+        addButton.Size = new Size(100, 30);
+        addButton.Location = new Point(380, 10);
+        addButton.Click += (s, e) => AddProduct();
+        toolbarPanel.Controls.Add(addButton);
+
+        editButton = new ModernButton();
+        editButton.Text = "âœï¸ Ð˜Ð·Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ";
+        editButton.Size = new Size(100, 30);
+        editButton.Location = new Point(490, 10);
+        editButton.BackColor = Color.FromArgb(255, 193, 7);
+        editButton.Click += (s, e) => EditProduct();
+        toolbarPanel.Controls.Add(editButton);
+
+        deleteButton = new ModernButton();
+        deleteButton.Text = "ðŸ—‘ï¸ Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ";
+        deleteButton.Size = new Size(100, 30);
+        deleteButton.Location = new Point(600, 10);
+        deleteButton.BackColor = Color.FromArgb(220, 53, 69);
+        deleteButton.Click += (s, e) => DeleteProduct();
+        toolbarPanel.Controls.Add(deleteButton);
+
+        refreshButton = new ModernButton();
+        refreshButton.Text = "ðŸ”„ ÐžÐ±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ";
+        refreshButton.Size = new Size(100, 30);
+        refreshButton.Location = new Point(710, 10);
+        refreshButton.BackColor = Color.FromArgb(108, 117, 125);
+        refreshButton.Click += (s, e) => _viewModel.LoadProductsCommand.Execute(null);
+        toolbarPanel.Controls.Add(refreshButton);
+
+        // Ð¢Ð°Ð±Ð»Ð¸Ñ†Ð° Ñ‚Ð¾Ð²Ð°Ñ€Ð¾Ð²
+        productsGrid = new DataGridView();
+        productsGrid.Size = new Size(920, 580);
+        productsGrid.Location = new Point(30, 140);
+        productsGrid.BackgroundColor = Color.White;
+        productsGrid.BorderStyle = BorderStyle.None;
+        productsGrid.Font = new Font("Segoe UI", 9);
+        productsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        productsGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        productsGrid.RowHeadersVisible = false;
+        productsGrid.AllowUserToAddRows = false;
+        productsGrid.ReadOnly = true;
+        productsGrid.SelectionChanged += (s, e) => UpdateButtonStates();
+
+        // Ð¡Ñ‚Ð¸Ð»Ð¸Ð·Ð°Ñ†Ð¸Ñ
+        productsGrid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(240, 240, 240);
+        productsGrid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+        productsGrid.EnableHeadersVisualStyles = false;
+
+        this.Controls.Add(productsGrid);
+    }
+
+    private void BindData()
+    {
+        // ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ° ÐºÐ¾Ð»Ð¾Ð½Ð¾Ðº
+        productsGrid.Columns.Clear();
+        productsGrid.Columns.Add("ArticleNumber", "ÐÑ€Ñ‚Ð¸ÐºÑƒÐ»");
+        productsGrid.Columns.Add("ProductName", "ÐÐ°Ð¸Ð¼ÐµÐ½Ð¾Ð²Ð°Ð½Ð¸Ðµ");
+        productsGrid.Columns.Add("Category", "ÐšÐ°Ñ‚ÐµÐ³Ð¾Ñ€Ð¸Ñ");
+        productsGrid.Columns.Add("SalePrice", "Ð¦ÐµÐ½Ð° Ð¿Ñ€Ð¾Ð´Ð°Ð¶Ð¸");
+        productsGrid.Columns.Add("StockBalance", "ÐžÑÑ‚Ð°Ñ‚Ð¾Ðº");
+        productsGrid.Columns.Add("MinStockLevel", "ÐœÐ¸Ð½. Ð·Ð°Ð¿Ð°Ñ");
+        productsGrid.Columns.Add("Status", "Ð¡Ñ‚Ð°Ñ‚ÑƒÑ");
+
+        productsGrid.Columns["SalePrice"].DefaultCellStyle.Format = "N2";
+        productsGrid.Columns["SalePrice"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+        productsGrid.Columns["StockBalance"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+        productsGrid.Columns["MinStockLevel"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+
+        // ÐŸÑ€Ð¸Ð²ÑÐ·ÐºÐ° Ð´Ð°Ð½Ð½Ñ‹Ñ…
+        _viewModel.PropertyChanged += (s, e) =>
         {
-            this.SuspendLayout();
-
-            // DataGridView
-            this.dataGridViewProducts = new DataGridView();
-            this.dataGridViewProducts.Dock = DockStyle.Fill;
-            this.dataGridViewProducts.Location = new Point(0, 50);
-            this.dataGridViewProducts.Size = new Size(800, 400);
-            this.dataGridViewProducts.TabIndex = 0;
-
-            // Button
-            this.btnAdd = new Button();
-            this.btnAdd.Text = "Äîáàâèòü";
-            this.btnAdd.Location = new Point(12, 12);
-            this.btnAdd.Size = new Size(100, 30);
-            this.btnAdd.Click += BtnAdd_Click;
-
-            // Panel for button
-            var panel = new Panel();
-            panel.Dock = DockStyle.Top;
-            panel.Height = 50;
-            panel.Controls.Add(this.btnAdd);
-
-            // Form
-            this.Text = "Óïðàâëåíèå òîâàðàìè";
-            this.ClientSize = new Size(800, 450);
-            this.Controls.Add(this.dataGridViewProducts);
-            this.Controls.Add(panel);
-
-            this.ResumeLayout(false);
-        }
-
-        private void SetupDataGrid()
-        {
-            dataGridViewProducts.AutoGenerateColumns = false;
-
-            // Î÷èùàåì êîëîíêè ïåðåä äîáàâëåíèåì
-            dataGridViewProducts.Columns.Clear();
-
-            // Íàñòðàèâàåì êîëîíêè
-            dataGridViewProducts.Columns.Add(new DataGridViewTextBoxColumn()
+            if (e.PropertyName == nameof(_viewModel.Products))
             {
-                DataPropertyName = "ArticleNumber",
-                HeaderText = "Àðòèêóë",
-                Width = 100
-            });
-
-            dataGridViewProducts.Columns.Add(new DataGridViewTextBoxColumn()
-            {
-                DataPropertyName = "Name",
-                HeaderText = "Íàçâàíèå",
-                Width = 200
-            });
-
-            dataGridViewProducts.Columns.Add(new DataGridViewTextBoxColumn()
-            {
-                DataPropertyName = "Price",
-                HeaderText = "Öåíà",
-                Width = 80
-            });
-
-            dataGridViewProducts.Columns.Add(new DataGridViewTextBoxColumn()
-            {
-                DataPropertyName = "StockBalance",
-                HeaderText = "Îñòàòîê",
-                Width = 60
-            });
-        }
-
-        private void LoadProducts()
-        {
-            dataGridViewProducts.DataSource = _viewModel.Products;
-        }
-
-        private void BtnAdd_Click(object sender, EventArgs e)
-        {
-            ShowAddProductForm();
-        }
-
-        private void ShowAddProductForm()
-        {
-            using (var form = new Form())
-            {
-                form.Text = "Äîáàâèòü òîâàð";
-                form.Size = new Size(350, 250);
-                form.StartPosition = FormStartPosition.CenterParent;
-                form.FormBorderStyle = FormBorderStyle.FixedDialog;
-                form.MaximizeBox = false;
-                form.MinimizeBox = false;
-
-                // Ñîçäàåì ýëåìåíòû ôîðìû
-                var lblArticle = new Label() { Text = "Àðòèêóë:", Location = new Point(20, 20), Width = 80 };
-                var txtArticle = new TextBox() { Location = new Point(100, 20), Width = 200 };
-
-                var lblName = new Label() { Text = "Íàçâàíèå:", Location = new Point(20, 50), Width = 80 };
-                var txtName = new TextBox() { Location = new Point(100, 50), Width = 200 };
-
-                var lblPrice = new Label() { Text = "Öåíà:", Location = new Point(20, 80), Width = 80 };
-                var txtPrice = new TextBox() { Location = new Point(100, 80), Width = 200 };
-
-                var lblStock = new Label() { Text = "Êîëè÷åñòâî:", Location = new Point(20, 110), Width = 80 };
-                var txtStock = new TextBox() { Location = new Point(100, 110), Width = 200 };
-
-                var lblCategory = new Label() { Text = "Êàòåãîðèÿ:", Location = new Point(20, 140), Width = 80 };
-                var txtCategory = new TextBox() { Location = new Point(100, 140), Width = 200 };
-
-                var btnOk = new Button() { Text = "Äîáàâèòü", Location = new Point(100, 170), Size = new Size(80, 30), DialogResult = DialogResult.OK };
-                var btnCancel = new Button() { Text = "Îòìåíà", Location = new Point(190, 170), Size = new Size(80, 30), DialogResult = DialogResult.Cancel };
-
-                form.Controls.AddRange(new Control[] {
-                    lblArticle, txtArticle, lblName, txtName,
-                    lblPrice, txtPrice, lblStock, txtStock,
-                    lblCategory, txtCategory, btnOk, btnCancel
-                });
-
-                form.AcceptButton = btnOk;
-                form.CancelButton = btnCancel;
-
-                if (form.ShowDialog() == DialogResult.OK)
+                productsGrid.Rows.Clear();
+                foreach (var product in _viewModel.Products)
                 {
-                    if (ValidateProductForm(txtArticle.Text, txtName.Text, txtPrice.Text, txtStock.Text))
-                    {
-                        var product = new SWM.Core.Models.Product
-                        {
-                            ArticleNumber = txtArticle.Text,
-                            Name = txtName.Text,
-                            Price = decimal.Parse(txtPrice.Text),
-                            StockBalance = int.Parse(txtStock.Text),
-                            Category = txtCategory.Text,
-                            Description = "Íîâûé òîâàð",
-                            Characteristics = "",
-                            WarehouseID = 1
-                        };
+                    int rowIndex = productsGrid.Rows.Add(
+                        product.ArticleNumber,
+                        product.ProductName,
+                        product.Category?.CategoryName ?? "",
+                        product.SalePrice,
+                        product.StockBalance,
+                        product.MinStockLevel,
+                        product.IsLowStock ? "ÐÐ¸Ð·ÐºÐ¸Ð¹ Ð·Ð°Ð¿Ð°Ñ" : "ÐÐ¾Ñ€Ð¼Ð°"
+                    );
 
-                        _viewModel.AddProduct(product);
-                        LoadProducts();
+                    // Ð Ð°ÑÐºÑ€Ð°ÑˆÐ¸Ð²Ð°ÐµÐ¼ ÑÑ‚Ñ€Ð¾ÐºÑƒ ÐµÑÐ»Ð¸ Ð½Ð¸Ð·ÐºÐ¸Ð¹ Ð·Ð°Ð¿Ð°Ñ
+                    if (product.IsLowStock)
+                    {
+                        productsGrid.Rows[rowIndex].DefaultCellStyle.BackColor = Color.FromArgb(255, 238, 238);
+                        productsGrid.Rows[rowIndex].DefaultCellStyle.ForeColor = Color.FromArgb(220, 53, 69);
+                    }
+                }
+            }
+
+            if (e.PropertyName == nameof(_viewModel.ErrorMessage) && !string.IsNullOrEmpty(_viewModel.ErrorMessage))
+            {
+                ShowError(_viewModel.ErrorMessage);
+            }
+        };
+
+        _viewModel.LoadProductsCommand.Execute(null);
+    }
+
+    private void UpdateButtonStates()
+    {
+        bool hasSelection = productsGrid.SelectedRows.Count > 0;
+        editButton.Enabled = hasSelection;
+        deleteButton.Enabled = hasSelection;
+    }
+
+    private void AddProduct()
+    {
+        var addForm = new AddProductForm(_viewModel);
+        if (addForm.ShowDialog() == DialogResult.OK)
+        {
+            _viewModel.LoadProductsCommand.Execute(null);
+        }
+    }
+
+    private void EditProduct()
+    {
+        if (productsGrid.SelectedRows.Count > 0)
+        {
+            var selectedRow = productsGrid.SelectedRows[0];
+            var articleNumber = selectedRow.Cells["ArticleNumber"].Value?.ToString();
+
+            if (!string.IsNullOrEmpty(articleNumber))
+            {
+                var product = _viewModel.Products.FirstOrDefault(p => p.ArticleNumber == articleNumber);
+
+                if (product != null)
+                {
+                    _viewModel.SelectedProduct = product;
+                    var editForm = new AddProductForm(_viewModel);
+                    if (editForm.ShowDialog() == DialogResult.OK)
+                    {
+                        _viewModel.LoadProductsCommand.Execute(null);
                     }
                 }
             }
         }
-
-        private bool ValidateProductForm(string article, string name, string price, string stock)
+        else
         {
-            if (string.IsNullOrWhiteSpace(article))
-            {
-                MessageBox.Show("Ââåäèòå àðòèêóë");
-                return false;
-            }
+            ShowWarning("Ð’Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ Ñ‚Ð¾Ð²Ð°Ñ€ Ð´Ð»Ñ Ñ€ÐµÐ´Ð°ÐºÑ‚Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¸Ñ");
+        }
+    }
 
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                MessageBox.Show("Ââåäèòå íàçâàíèå");
-                return false;
-            }
+    private void DeleteProduct()
+    {
+        if (productsGrid.SelectedRows.Count > 0)
+        {
+            var selectedRow = productsGrid.SelectedRows[0];
+            var articleNumber = selectedRow.Cells["ArticleNumber"].Value?.ToString();
+            var productName = selectedRow.Cells["ProductName"].Value?.ToString();
 
-            if (!decimal.TryParse(price, out decimal priceValue) || priceValue <= 0)
+            if (!string.IsNullOrEmpty(articleNumber) && !string.IsNullOrEmpty(productName))
             {
-                MessageBox.Show("Ââåäèòå êîððåêòíóþ öåíó");
-                return false;
-            }
+                var product = _viewModel.Products.FirstOrDefault(p => p.ArticleNumber == articleNumber);
 
-            if (!int.TryParse(stock, out int stockValue) || stockValue < 0)
-            {
-                MessageBox.Show("Ââåäèòå êîððåêòíîå êîëè÷åñòâî");
-                return false;
+                if (product != null)
+                {
+                    var result = ShowQuestion($"Ð’Ñ‹ ÑƒÐ²ÐµÑ€ÐµÐ½Ñ‹, Ñ‡Ñ‚Ð¾ Ñ…Ð¾Ñ‚Ð¸Ñ‚Ðµ ÑƒÐ´Ð°Ð»Ð¸Ñ‚ÑŒ Ñ‚Ð¾Ð²Ð°Ñ€ \"{productName}\"?");
+                    if (result == DialogResult.Yes)
+                    {
+                        _viewModel.DeleteProductCommand.Execute(product.ProductID);
+                        _viewModel.LoadProductsCommand.Execute(null);
+                    }
+                }
             }
-
-            return true;
+        }
+        else
+        {
+            ShowWarning("Ð’Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ Ñ‚Ð¾Ð²Ð°Ñ€ Ð´Ð»Ñ ÑƒÐ´Ð°Ð»ÐµÐ½Ð¸Ñ");
         }
     }
 }

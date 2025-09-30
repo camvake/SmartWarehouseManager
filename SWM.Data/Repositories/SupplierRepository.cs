@@ -1,55 +1,36 @@
-﻿using System.Data.SQLite;
+﻿using SWM.Core.Models;
+using System;
 using System.Collections.Generic;
-using SWM.Core.Models;
+using System.Data.SQLite;
 
 namespace SWM.Data.Repositories
 {
-    public class SupplierRepository : BaseRepository<Supplier>
+    public class SupplierRepository : BaseRepository
     {
         public SupplierRepository(string connectionString) : base(connectionString) { }
 
-        public List<Supplier> GetAllSuppliers()
+        public List<Supplier> GetActiveSuppliers()
         {
             var suppliers = new List<Supplier>();
+            var sql = "SELECT * FROM Suppliers WHERE IsActive = 1 ORDER BY SupplierName";
 
-            using (var connection = GetConnection())
+            using (var reader = ExecuteReader(sql))
             {
-                connection.Open();
-                string query = "SELECT * FROM Suppliers ORDER BY Name";
-
-                using (var command = new SQLiteCommand(query, connection))
-                using (var reader = command.ExecuteReader())
+                while (reader.Read())
                 {
-                    while (reader.Read())
+                    suppliers.Add(new Supplier
                     {
-                        suppliers.Add(new Supplier
-                        {
-                            SupplierID = reader.GetInt32(reader.GetOrdinal("SupplierID")),
-                            Name = reader.GetString(reader.GetOrdinal("Name")),
-                            ContactDetails = reader.GetString(reader.GetOrdinal("ContactDetails"))
-                        });
-                    }
+                        SupplierID = Convert.ToInt32(reader["SupplierID"]),
+                        SupplierName = reader["SupplierName"].ToString(),
+                        ContactPerson = reader["ContactPerson"]?.ToString(),
+                        Phone = reader["Phone"]?.ToString(),
+                        Email = reader["Email"]?.ToString(),
+                        Address = reader["Address"]?.ToString(),
+                        IsActive = Convert.ToBoolean(reader["IsActive"])
+                    });
                 }
             }
-
             return suppliers;
-        }
-
-        public void CreateSupplier(Supplier supplier)
-        {
-            using (var connection = GetConnection())
-            {
-                connection.Open();
-                string query = "INSERT INTO Suppliers (Name, ContactDetails) VALUES (@Name, @ContactDetails)";
-
-                using (var command = new SQLiteCommand(query, connection))
-                {
-                    command.Parameters.AddWithValue("@Name", supplier.Name);
-                    command.Parameters.AddWithValue("@ContactDetails", supplier.ContactDetails);
-
-                    command.ExecuteNonQuery();
-                }
-            }
         }
     }
 }

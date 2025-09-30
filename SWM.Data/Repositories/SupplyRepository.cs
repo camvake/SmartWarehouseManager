@@ -1,184 +1,193 @@
-﻿using System.Data.SQLite;
+﻿using SWM.Core.Models;
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using SWM.Core.Models;
-using ProductModel = SWM.Core.Models.Product;
+using System.Data.SQLite;
 
 namespace SWM.Data.Repositories
 {
-    public class SupplyRepository : BaseRepository<Supply>
+    public class ReceiptRepository : BaseRepository
     {
-        public SupplyRepository(string connectionString) : base(connectionString) { }
+        public ReceiptRepository(string connectionString) : base(connectionString) { }
 
-        public List<Supply> GetAllSupplies()
+        public Receipt GetById(int receiptId)
         {
-            var supplies = new List<Supply>();
+            var sql = @"
+                SELECT r.*, s.SupplierName, w.WarehouseName, u.FirstName, u.LastName
+                FROM Receipts r
+                LEFT JOIN Suppliers s ON r.SupplierID = s.SupplierID
+                LEFT JOIN Warehouses w ON r.WarehouseID = w.WarehouseID
+                LEFT JOIN Users u ON r.UserID = u.UserID
+                WHERE r.ReceiptID = @ReceiptID";
 
-            using (var connection = GetConnection())
+            using (var reader = ExecuteReader(sql, new SQLiteParameter("@ReceiptID", receiptId)))
             {
-                connection.Open();
-                string query = @"
-                    SELECT s.*, sup.Name as SupplierName, w.Name as WarehouseName
-                    FROM Receipts s
-                    LEFT JOIN Suppliers sup ON s.SupplierID = sup.SupplierID
-                    LEFT JOIN Warehouses w ON s.WarehouseID = w.WarehouseID
-                    ORDER BY s.ReceiptDate DESC";
-
-                using (var command = new SQLiteCommand(query, connection))
-                using (var reader = command.ExecuteReader())
+                if (reader.Read())
                 {
-                    while (reader.Read())
-                    {
-                        var supply = new Supply
-                        {
-                            SupplyID = reader.GetInt32(reader.GetOrdinal("ReceiptID")),
-                            SupplyNumber = reader.GetString(reader.GetOrdinal("ReceiptNumber")),
-                            SupplyDate = reader.GetDateTime(reader.GetOrdinal("ReceiptDate")),
-                            SupplierID = reader.GetInt32(reader.GetOrdinal("SupplierID")),
-                            SupplierName = reader.GetString(reader.GetOrdinal("SupplierName")),
-                            WarehouseID = reader.GetInt32(reader.GetOrdinal("WarehouseID")),
-                            WarehouseName = reader.GetString(reader.GetOrdinal("WarehouseName")),
-                            Status = SupplyStatus.Received // Упрощенно
-                        };
-
-                        // Загружаем товары поставки
-                        supply.SupplyItems = GetSupplyItems(connection, supply.SupplyID);
-                        supply.TotalAmount = supply.SupplyItems.Sum(x => x.TotalPrice);
-
-                        supplies.Add(supply);
-                    }
+                    var receipt = MapReceipt(reader);
+                    receipt.ReceiptItems = GetReceiptItems(receiptId);
+                    return receipt;
                 }
             }
-
-            return supplies;
+            return null;
         }
 
-        private List<SupplyItem> GetSupplyItems(SQLiteConnection connection, int supplyId)
+        public List<Receipt> GetAll()
         {
-            var items = new List<SupplyItem>();
+            var receipts = new List<Receipt>();
+            var sql = @"
+                SELECT r.*, s.SupplierName, w.WarehouseName, u.FirstName, u.LastName
+                FROM Receipts r
+                LEFT JOIN Suppliers s ON r.SupplierID = s.SupplierID
+                LEFT JOIN Warehouses w ON r.WarehouseID = w.WarehouseID
+                LEFT JOIN Users u ON r.UserID = u.UserID
+                ORDER BY r.ReceiptDate DESC";
 
-            string query = @"
-                SELECT si.*, p.Name as ProductName, p.ArticleNumber
-                FROM ReceiptItems si
-                JOIN Products p ON si.ProductID = p.ProductID
-                WHERE si.ReceiptID = @SupplyID";
-
-            using (var command = new SQLiteCommand(query, connection))
+            using (var reader = ExecuteReader(sql))
             {
-                command.Parameters.AddWithValue("@SupplyID", supplyId);
-
-                using (var reader = command.ExecuteReader())
+                while (reader.Read())
                 {
-                    while (reader.Read())
-                    {
-                        items.Add(new SupplyItem
-                        {
-                            SupplyItemID = reader.GetInt32(reader.GetOrdinal("ReceiptItemID")),
-                            SupplyID = reader.GetInt32(reader.GetOrdinal("ReceiptID")),
-                            ProductID = reader.GetInt32(reader.GetOrdinal("ProductID")),
-                            ProductName = reader.GetString(reader.GetOrdinal("ProductName")),
-                            ArticleNumber = reader.GetString(reader.GetOrdinal("ArticleNumber")),
-                            Quantity = reader.GetInt32(reader.GetOrdinal("Quantity")),
-                            UnitPrice = reader.GetDecimal(reader.GetOrdinal("UnitPrice"))
-                        });
-                    }
+                    var receipt = MapReceipt(reader);
+                    receipts.Add(receipt);
                 }
             }
+            return receipts;
+        }
 
+        public List<Receipt> GetBySupplier(int supplierId)
+        {
+            var receipts = new List<Receipt>();
+            var sql = @"
+                SELECT r.*, s.SupplierName, w.WarehouseName, u.FirstName, u.LastName
+                FROM Receipts r
+                LEFT JOIN Suppliers s ON r.SupplierID = s.SupplierID
+                LEFT JOIN Warehouses w ON r.WarehouseID = w.WarehouseID
+                LEFT JOIN Users u ON r.UserID = u.UserID
+                WHERE r.SupplierID = @SupplierID
+                ORDER BY r.ReceiptDate DESC";
+
+            using (var reader = ExecuteReader(sql, new SQLiteParameter("@SupplierID", supplierId)))
+            {
+                while (reader.Read())
+                {
+                    var receipt = MapReceipt(reader);
+                    receipts.Add(receipt);
+                }
+            }
+            return receipts;
+        }
+
+        public int Create(Receipt receipt)
+        {
+            var sql = @"
+                INSERT INTO Receipts (ReceiptNumber, SupplierID, WarehouseID, ExpectedDate, 
+                                    TotalQuantity, TotalAmount, Status, UserID, InvoiceNumber, Notes)
+                VALUES (@ReceiptNumber, @SupplierID, @WarehouseID, @ExpectedDate,
+                       @TotalQuantity, @TotalAmount, @Status, @UserID, @InvoiceNumber, @Notes);
+                SELECT last_insert_rowid();";
+
+            var parameters = new[]
+            {
+                new SQLiteParameter("@ReceiptNumber", receipt.ReceiptNumber),
+                new SQLiteParameter("@SupplierID", receipt.SupplierID),
+                new SQLiteParameter("@WarehouseID", receipt.WarehouseID),
+                new SQLiteParameter("@ExpectedDate", receipt.ExpectedDate ?? (object)DBNull.Value),
+                new SQLiteParameter("@TotalQuantity", receipt.TotalQuantity),
+                new SQLiteParameter("@TotalAmount", receipt.TotalAmount),
+                new SQLiteParameter("@Status", receipt.Status),
+                new SQLiteParameter("@UserID", receipt.UserID),
+                new SQLiteParameter("@InvoiceNumber", receipt.InvoiceNumber ?? (object)DBNull.Value),
+                new SQLiteParameter("@Notes", receipt.Notes ?? (object)DBNull.Value)
+            };
+
+            return Convert.ToInt32(ExecuteScalar(sql, parameters));
+        }
+
+        public void CreateReceiptItem(ReceiptItem item)
+        {
+            var sql = @"
+                INSERT INTO ReceiptItems (ReceiptID, ProductID, Quantity, UnitCost, TotalCost, BatchNumber, ExpiryDate)
+                VALUES (@ReceiptID, @ProductID, @Quantity, @UnitCost, @TotalCost, @BatchNumber, @ExpiryDate)";
+
+            var parameters = new[]
+            {
+                new SQLiteParameter("@ReceiptID", item.ReceiptID),
+                new SQLiteParameter("@ProductID", item.ProductID),
+                new SQLiteParameter("@Quantity", item.Quantity),
+                new SQLiteParameter("@UnitCost", item.UnitCost),
+                new SQLiteParameter("@TotalCost", item.TotalCost),
+                new SQLiteParameter("@BatchNumber", item.BatchNumber ?? (object)DBNull.Value),
+                new SQLiteParameter("@ExpiryDate", item.ExpiryDate ?? (object)DBNull.Value)
+            };
+
+            ExecuteNonQuery(sql, parameters);
+        }
+
+        public void UpdateStatus(int receiptId, string status)
+        {
+            var sql = "UPDATE Receipts SET Status = @Status WHERE ReceiptID = @ReceiptID";
+            ExecuteNonQuery(sql,
+                new SQLiteParameter("@Status", status),
+                new SQLiteParameter("@ReceiptID", receiptId));
+        }
+
+        private List<ReceiptItem> GetReceiptItems(int receiptId)
+        {
+            var items = new List<ReceiptItem>();
+            var sql = @"
+                SELECT ri.*, p.ProductName, p.ArticleNumber
+                FROM ReceiptItems ri
+                LEFT JOIN Products p ON ri.ProductID = p.ProductID
+                WHERE ri.ReceiptID = @ReceiptID";
+
+            using (var reader = ExecuteReader(sql, new SQLiteParameter("@ReceiptID", receiptId)))
+            {
+                while (reader.Read())
+                {
+                    items.Add(new ReceiptItem
+                    {
+                        ReceiptItemID = Convert.ToInt32(reader["ReceiptItemID"]),
+                        ReceiptID = Convert.ToInt32(reader["ReceiptID"]),
+                        ProductID = Convert.ToInt32(reader["ProductID"]),
+                        Quantity = Convert.ToInt32(reader["Quantity"]),
+                        UnitCost = Convert.ToDecimal(reader["UnitCost"]),
+                        TotalCost = Convert.ToDecimal(reader["TotalCost"]),
+                        BatchNumber = reader["BatchNumber"]?.ToString(),
+                        ExpiryDate = reader["ExpiryDate"] != DBNull.Value ? Convert.ToDateTime(reader["ExpiryDate"]) : null,
+                        Product = new Product
+                        {
+                            ProductName = reader["ProductName"].ToString(),
+                            ArticleNumber = reader["ArticleNumber"].ToString()
+                        }
+                    });
+                }
+            }
             return items;
         }
 
-        public void CreateSupply(Supply supply)
+        private Receipt MapReceipt(SQLiteDataReader reader)
         {
-            using (var connection = GetConnection())
+            return new Receipt
             {
-                connection.Open();
-
-                using (var transaction = connection.BeginTransaction())
+                ReceiptID = Convert.ToInt32(reader["ReceiptID"]),
+                ReceiptNumber = reader["ReceiptNumber"].ToString(),
+                SupplierID = Convert.ToInt32(reader["SupplierID"]),
+                WarehouseID = Convert.ToInt32(reader["WarehouseID"]),
+                ReceiptDate = Convert.ToDateTime(reader["ReceiptDate"]),
+                ExpectedDate = reader["ExpectedDate"] != DBNull.Value ? Convert.ToDateTime(reader["ExpectedDate"]) : null,
+                TotalQuantity = Convert.ToInt32(reader["TotalQuantity"]),
+                TotalAmount = Convert.ToDecimal(reader["TotalAmount"]),
+                Status = reader["Status"].ToString(),
+                UserID = Convert.ToInt32(reader["UserID"]),
+                InvoiceNumber = reader["InvoiceNumber"]?.ToString(),
+                Notes = reader["Notes"]?.ToString(),
+                Supplier = new Supplier { SupplierName = reader["SupplierName"]?.ToString() },
+                Warehouse = new Warehouse { WarehouseName = reader["WarehouseName"]?.ToString() },
+                User = new User
                 {
-                    try
-                    {
-                        // Создаем поставку
-                        string supplyQuery = @"
-                            INSERT INTO Receipts (ReceiptNumber, ReceiptDate, SupplierID, WarehouseID)
-                            VALUES (@SupplyNumber, @SupplyDate, @SupplierID, @WarehouseID);
-                            SELECT last_insert_rowid();";
-
-                        int supplyId;
-                        using (var command = new SQLiteCommand(supplyQuery, connection))
-                        {
-                            command.Parameters.AddWithValue("@SupplyNumber", GenerateSupplyNumber());
-                            command.Parameters.AddWithValue("@SupplyDate", supply.SupplyDate);
-                            command.Parameters.AddWithValue("@SupplierID", supply.SupplierID);
-                            command.Parameters.AddWithValue("@WarehouseID", supply.WarehouseID);
-
-                            supplyId = Convert.ToInt32(command.ExecuteScalar());
-                        }
-
-                        // Добавляем товары поставки
-                        foreach (var item in supply.SupplyItems)
-                        {
-                            AddSupplyItem(connection, supplyId, item);
-
-                            // Обновляем остатки на складе
-                            UpdateProductStock(connection, item.ProductID, item.Quantity);
-                        }
-
-                        transaction.Commit();
-                    }
-                    catch
-                    {
-                        transaction.Rollback();
-                        throw;
-                    }
+                    FirstName = reader["FirstName"]?.ToString(),
+                    LastName = reader["LastName"]?.ToString()
                 }
-            }
-        }
-
-        private void AddSupplyItem(SQLiteConnection connection, int supplyId, SupplyItem item)
-        {
-            string query = @"
-                INSERT INTO ReceiptItems (ReceiptID, ProductID, Quantity, UnitPrice)
-                VALUES (@SupplyID, @ProductID, @Quantity, @UnitPrice)";
-
-            using (var command = new SQLiteCommand(query, connection))
-            {
-                command.Parameters.AddWithValue("@SupplyID", supplyId);
-                command.Parameters.AddWithValue("@ProductID", item.ProductID);
-                command.Parameters.AddWithValue("@Quantity", item.Quantity);
-                command.Parameters.AddWithValue("@UnitPrice", item.UnitPrice);
-
-                command.ExecuteNonQuery();
-            }
-        }
-
-        private void UpdateProductStock(SQLiteConnection connection, int productId, int quantity)
-        {
-            string query = "UPDATE Products SET StockBalance = StockBalance + @Quantity WHERE ProductID = @ProductID";
-
-            using (var command = new SQLiteCommand(query, connection))
-            {
-                command.Parameters.AddWithValue("@ProductID", productId);
-                command.Parameters.AddWithValue("@Quantity", quantity);
-
-                command.ExecuteNonQuery();
-            }
-        }
-
-        private string GenerateSupplyNumber()
-        {
-            return "SUP-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
-        }
-
-        public List<Inventory> GetInventoryHistory()
-        {
-            // Заглушка - в реальном приложении нужно реализовать
-            return new List<Inventory>();
-        }
-
-        public void CreateInventory(Inventory inventory)
-        {
-            // Заглушка - реализовать создание инвентаризации
+            };
         }
     }
 }

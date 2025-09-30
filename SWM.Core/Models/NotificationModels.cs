@@ -9,65 +9,58 @@ namespace SWM.Core.Models
         public string Message { get; set; }
         public NotificationType Type { get; set; }
         public NotificationPriority Priority { get; set; }
-        public DateTime CreatedDate { get; set; }
+        public int? RelatedID { get; set; } // ID связанной сущности (заказ, поставка и т.д.)
+        public string RelatedType { get; set; } // Тип сущности
         public bool IsRead { get; set; }
-        public int? RelatedEntityID { get; set; } // ID связанной сущности (заказ, поставка и т.д.)
-        public string RelatedEntityType { get; set; } // Тип сущности
+        public DateTime CreatedDate { get; set; }
+        public DateTime? ReadDate { get; set; }
+        public int? UserID { get; set; } // Если уведомление персональное
 
         // Вычисляемые свойства
-        public string PriorityIcon => GetPriorityIcon();
-        public string TypeIcon => GetTypeIcon();
-
-        private string GetPriorityIcon()
+        public string PriorityIcon => Priority switch
         {
-            return Priority switch
-            {
-                NotificationPriority.Low => "💡",
-                NotificationPriority.Medium => "⚠️",
-                NotificationPriority.High => "🚨",
-                NotificationPriority.Critical => "🔥",
-                _ => "📌"
-            };
-        }
+            NotificationPriority.Low => "ℹ️",
+            NotificationPriority.Medium => "⚠️",
+            NotificationPriority.High => "🚨",
+            _ => "📢"
+        };
 
-        private string GetTypeIcon()
+        public string TypeIcon => Type switch
         {
-            return Type switch
-            {
-                NotificationType.Stock => "📦",
-                NotificationType.Order => "📋",
-                NotificationType.Supply => "🚚",
-                NotificationType.System => "⚙️",
-                NotificationType.Report => "📊",
-                _ => "📢"
-            };
-        }
+            NotificationType.Stock => "📦",
+            NotificationType.Order => "📋",
+            NotificationType.Supply => "🚚",
+            NotificationType.Inventory => "📊",
+            NotificationType.System => "⚙️",
+            _ => "📢"
+        };
     }
 
     public enum NotificationType
     {
-        Stock = 1,      // Уведомления о запасах
-        Order = 2,      // Уведомления о заказах
-        Supply = 3,     // Уведомления о поставках
-        System = 4,     // Системные уведомления
-        Report = 5      // Отчеты и аналитика
+        Stock = 1,
+        Order = 2,
+        Supply = 3,
+        Inventory = 4,
+        System = 5
     }
 
     public enum NotificationPriority
     {
         Low = 1,
         Medium = 2,
-        High = 3,
-        Critical = 4
+        High = 3
     }
 
-    public class DashboardStats
+    public class StockAlert
     {
-        public int PendingOrders { get; set; }
-        public int LowStockProducts { get; set; }
-        public int TodaySupplies { get; set; }
-        public int UnreadNotifications { get; set; }
-        public decimal TodayRevenue { get; set; }
-        public int ThisWeekOrders { get; set; }
+        public int ProductID { get; set; }
+        public string ProductName { get; set; }
+        public string ArticleNumber { get; set; }
+        public int CurrentStock { get; set; }
+        public int MinStockLevel { get; set; }
+        public string AlertType { get; set; } // "LowStock", "OutOfStock", "Overstock"
+        public string Message { get; set; }
+        public DateTime AlertDate { get; set; }
     }
 }

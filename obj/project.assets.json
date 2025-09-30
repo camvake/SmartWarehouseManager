@@ -82,19 +82,19 @@
   },
   "packageFolders": {
     "C:\\Users\\Doll\\.nuget\\packages\\": {},
-    "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
+    "D:\\2\\NuGetPackages": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\Doll\\OneDrive\\Desktop\\SmartWarehouseManager\\SmartWarehouseManager\\SmartWarehouseManager.csproj",
+      "projectUniqueName": "C:\\Users\\Doll\\source\\repos\\SmartWarehouseManager\\SmartWarehouseManager\\SmartWarehouseManager.csproj",
       "projectName": "SmartWarehouseManager",
-      "projectPath": "C:\\Users\\Doll\\OneDrive\\Desktop\\SmartWarehouseManager\\SmartWarehouseManager\\SmartWarehouseManager.csproj",
+      "projectPath": "C:\\Users\\Doll\\source\\repos\\SmartWarehouseManager\\SmartWarehouseManager\\SmartWarehouseManager.csproj",
       "packagesPath": "C:\\Users\\Doll\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\Doll\\OneDrive\\Desktop\\SmartWarehouseManager\\SmartWarehouseManager\\obj\\",
+      "outputPath": "C:\\Users\\Doll\\source\\repos\\SmartWarehouseManager\\SmartWarehouseManager\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
-        "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        "D:\\2\\NuGetPackages"
       ],
       "configFilePaths": [
         "C:\\Users\\Doll\\AppData\\Roaming\\NuGet\\NuGet.Config",
@@ -124,7 +124,7 @@
         "auditLevel": "low",
         "auditMode": "direct"
       },
-      "SdkAnalysisLevel": "9.0.300"
+      "SdkAnalysisLevel": "9.0.200"
     },
     "frameworks": {
       "net8.0-windows7.0": {
@@ -154,7 +154,7 @@
             "privateAssets": "none"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.302/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "D:\\01\\dotnet\\sdk\\9.0.203/PortableRuntimeIdentifierGraph.json"
       }
     }
   }

@@ -1,318 +1,336 @@
-﻿using SWM.Core.Models;
-using SWM.Views.Forms;
-using SWM.Views.Forms.Notifications;
+﻿using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Windows.Forms;
+using SWM.Core.Services;
 using SWM.Views.Forms.Orders;
 using SWM.Views.Forms.Product;
 using SWM.Views.Forms.Reports;
 using SWM.Views.Forms.Supplies;
 using SWM.Views.Forms.Users;
-using System;
-using System.Drawing;
-using System.Windows.Forms;
+using SWM.Views.Forms;
 
-namespace SWM.Views
+public class MainForm : Form
 {
-    public class MainForm : Form
+    private Panel sidebarPanel;
+    private Panel headerPanel;
+    private Panel workspacePanel;
+    private Label appTitleLabel;
+    private Label userNameLabel;
+    private Dictionary<string, Form> openForms = new Dictionary<string, Form>();
+    private Button currentActiveButton;
+
+    // Цветовая схема
+    private readonly Color primaryColor = Color.FromArgb(0, 122, 204);
+    private readonly Color sidebarColor = Color.FromArgb(45, 45, 48);
+    private readonly Color headerColor = Color.White;
+    private readonly Color workspaceColor = Color.FromArgb(250, 250, 250);
+    private readonly Color hoverColor = Color.FromArgb(62, 62, 64);
+    private readonly Color activeColor = Color.FromArgb(0, 122, 204);
+
+    public MainForm()
     {
-        private string _connectionString;
-        private User _currentUser;
-        private ToolStripStatusLabel _lblUserInfo;
+        InitializeForm();
+        InitializeHeader();
+        InitializeSidebar();
+        InitializeWorkspace();
+        LoadDashboard();
+    }
 
-        public MainForm(string connectionString, User currentUser)
+    private void InitializeForm()
+    {
+        this.Text = "Business Management System";
+        this.Size = new Size(1200, 800);
+        this.StartPosition = FormStartPosition.CenterScreen;
+        this.FormBorderStyle = FormBorderStyle.None;
+        this.BackColor = workspaceColor;
+        this.Padding = new Padding(0);
+        this.DoubleBuffered = true;
+    }
+
+    private void InitializeHeader()
+    {
+        headerPanel = new Panel();
+        headerPanel.Size = new Size(1200, 60);
+        headerPanel.Location = new Point(0, 0);
+        headerPanel.BackColor = headerColor;
+        headerPanel.Paint += HeaderPanel_Paint;
+
+        // Заголовок приложения
+        appTitleLabel = new Label();
+        appTitleLabel.Text = "Business Management System";
+        appTitleLabel.Font = new Font("Segoe UI", 14, FontStyle.Bold);
+        appTitleLabel.ForeColor = primaryColor;
+        appTitleLabel.Location = new Point(20, 15);
+        appTitleLabel.AutoSize = true;
+
+        // Информация пользователя
+        userNameLabel = new Label();
+        userNameLabel.Text = "Администратор";
+        userNameLabel.Font = new Font("Segoe UI", 9);
+        userNameLabel.ForeColor = Color.FromArgb(100, 100, 100);
+        userNameLabel.Location = new Point(1000, 20);
+        userNameLabel.AutoSize = true;
+
+        // Кнопка закрытия
+        var closeButton = CreateHeaderButton("X", Color.FromArgb(255, 80, 80));
+        closeButton.Location = new Point(1150, 15);
+        closeButton.Click += (s, e) => Application.Exit();
+
+        // Кнопка свернуть
+        var minimizeButton = CreateHeaderButton("_", Color.FromArgb(100, 100, 100));
+        minimizeButton.Location = new Point(1110, 15);
+        minimizeButton.Click += (s, e) => this.WindowState = FormWindowState.Minimized;
+
+        headerPanel.Controls.AddRange(new Control[] {
+            appTitleLabel, userNameLabel, closeButton, minimizeButton
+        });
+        this.Controls.Add(headerPanel);
+    }
+
+    private void HeaderPanel_Paint(object sender, PaintEventArgs e)
+    {
+        // Рисуем нижнюю границу
+        using (var pen = new Pen(Color.FromArgb(240, 240, 240), 1))
         {
-            _connectionString = connectionString;
-            _currentUser = currentUser;
+            e.Graphics.DrawLine(pen, 0, 59, headerPanel.Width, 59);
+        }
+    }
 
-            // ВАЖНО: Устанавливаем это свойство ДО InitializeComponent()
-            this.IsMdiContainer = true;
+    private Button CreateHeaderButton(string text, Color backColor)
+    {
+        var button = new Button();
+        button.Text = text;
+        button.Size = new Size(30, 30);
+        button.BackColor = backColor;
+        button.ForeColor = Color.White;
+        button.FlatStyle = FlatStyle.Flat;
+        button.FlatAppearance.BorderSize = 0;
+        button.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+        button.Cursor = Cursors.Hand;
 
-            InitializeComponent();
-            SetupUI();
-            ApplyUserPermissions();
+        // Закругленные углы
+        button.Paint += (s, e) =>
+        {
+            using (var path = GetRoundedPath(new Rectangle(0, 0, button.Width - 1, button.Height - 1), 5))
+            using (var brush = new SolidBrush(button.BackColor))
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                e.Graphics.FillPath(brush, path);
+            }
+
+            TextRenderer.DrawText(e.Graphics, button.Text, button.Font,
+                new Rectangle(0, 0, button.Width, button.Height),
+                button.ForeColor,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        };
+
+        return button;
+    }
+
+    private void InitializeSidebar()
+    {
+        sidebarPanel = new Panel();
+        sidebarPanel.Size = new Size(220, 740);
+        sidebarPanel.Location = new Point(0, 60);
+        sidebarPanel.BackColor = sidebarColor;
+
+        CreateMenuItems();
+        this.Controls.Add(sidebarPanel);
+    }
+
+    private void CreateMenuItems()
+    {
+        var menuItems = new[]
+        {
+            new { Text = "📊 Дашборд", FormName = "Dashboard" },
+            new { Text = "📦 Заказы", FormName = "Orders" },
+            new { Text = "📁 Товары", FormName = "Products" },
+            new { Text = "🚚 Поставки", FormName = "Supply" },
+            new { Text = "📈 Отчеты", FormName = "Reports" },
+            new { Text = "👥 Пользователи", FormName = "Users" },
+            new { Text = "📦 Инвентарь", FormName = "Inventory" },
+            new { Text = "🔔 Уведомления", FormName = "Notifications" }
+        };
+
+        int y = 20;
+        foreach (var item in menuItems)
+        {
+            var menuButton = CreateMenuButton(item.Text, item.FormName, y);
+            sidebarPanel.Controls.Add(menuButton);
+            y += 45;
+        }
+    }
+
+    private Button CreateMenuButton(string text, string formName, int y)
+    {
+        var button = new Button();
+        button.Text = text;
+        button.Tag = formName;
+        button.Size = new Size(220, 40);
+        button.Location = new Point(0, y);
+        button.FlatStyle = FlatStyle.Flat;
+        button.FlatAppearance.BorderSize = 0;
+        button.BackColor = Color.Transparent;
+        button.ForeColor = Color.White;
+        button.TextAlign = ContentAlignment.MiddleLeft;
+        button.Padding = new Padding(20, 0, 0, 0);
+        button.Font = new Font("Segoe UI", 10);
+        button.Cursor = Cursors.Hand;
+        button.TextAlign = ContentAlignment.MiddleLeft;
+
+        // События
+        button.Click += (s, e) =>
+        {
+            SetActiveButton(button);
+            OpenForm(formName);
+        };
+
+        button.MouseEnter += (s, e) =>
+        {
+            if (button != currentActiveButton)
+            {
+                button.BackColor = hoverColor;
+            }
+        };
+
+        button.MouseLeave += (s, e) =>
+        {
+            if (button != currentActiveButton)
+            {
+                button.BackColor = Color.Transparent;
+            }
+        };
+
+        return button;
+    }
+
+    private void SetActiveButton(Button button)
+    {
+        // Сбрасываем предыдущую активную кнопку
+        if (currentActiveButton != null)
+        {
+            currentActiveButton.BackColor = Color.Transparent;
+            currentActiveButton.Font = new Font("Segoe UI", 10);
         }
 
-        private void InitializeComponent()
+        // Устанавливаем новую активную кнопку
+        currentActiveButton = button;
+        currentActiveButton.BackColor = activeColor;
+        currentActiveButton.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+    }
+
+    private void InitializeWorkspace()
+    {
+        workspacePanel = new Panel();
+        workspacePanel.Size = new Size(980, 740);
+        workspacePanel.Location = new Point(220, 60);
+        workspacePanel.BackColor = workspaceColor;
+        this.Controls.Add(workspacePanel);
+    }
+
+    private void OpenForm(string formName)
+{
+    foreach (var form in openForms.Values)
+    {
+        form.Hide();
+    }
+
+    if (!openForms.ContainsKey(formName))
+    {
+        string connectionString = "Your_Connection_String_Here"; // Получите из конфига
+        
+        Form newForm = formName switch
         {
-            this.SuspendLayout();
+            "Dashboard" => new DashboardForm(),
+            "Orders" => new OrdersForm(connectionString), // Передаем connection string
+            "Products" => new ProductsForm(connectionString), // Передаем connection string
+            "Supply" => new SuppliesForm(connectionString),
+            "Reports" => new ReportsForm(connectionString),
+            "Users" => new UsersForm(connectionString),
+            "Inventory" => new InventoryForm(connectionString),
+            "Notifications" => new NotificationsForm(),
+            _ => new DashboardForm()
+        };
 
-            this.Text = $"Smart Warehouse Manager - {_currentUser.FullName} ({_currentUser.RoleDisplay})";
-            this.ClientSize = new Size(1200, 700);
-            this.StartPosition = FormStartPosition.CenterScreen;
-            this.WindowState = FormWindowState.Maximized;
-            this.IsMdiContainer = true; // ДОБАВЬ ЭТУ СТРОКУ
+        ConfigureForm(newForm);
+        workspacePanel.Controls.Add(newForm);
+        openForms[formName] = newForm;
+    }
 
-            // Создаем статус бар
-            var statusStrip = new StatusStrip();
-            _lblUserInfo = new ToolStripStatusLabel()
-            {
-                Text = $"Пользователь: {_currentUser.FullName} | Роль: {_currentUser.RoleDisplay}",
-                Spring = true,
-                TextAlign = ContentAlignment.MiddleLeft
-            };
+    openForms[formName].Show();
+    openForms[formName].BringToFront();
+}
 
-            var lblTime = new ToolStripStatusLabel()
-            {
-                Text = DateTime.Now.ToString("dd.MM.yyyy HH:mm"),
-                TextAlign = ContentAlignment.MiddleRight
-            };
+    // Методы для создания форм (заглушки)
+    private Form CreateDashboardForm() => new DashboardForm();
+    private Form CreateOrdersForm() => new OrdersForm();
+    private Form CreateProductsForm() => new ProductsForm();
+    private Form CreateSuppliesForm() => new SuppliesForm();
+    private Form CreateReportsForm() => new ReportsForm();
+    private Form CreateUsersForm() => new UsersForm();
+    private Form CreateInventoryForm() => new InventoryForm();
+    private Form CreateNotificationsForm() => new NotificationsForm();
 
-            statusStrip.Items.AddRange(new ToolStripItem[] { _lblUserInfo, lblTime });
-            this.Controls.Add(statusStrip);
+    private void ConfigureForm(Form form)
+    {
+        form.TopLevel = false;
+        form.FormBorderStyle = FormBorderStyle.None;
+        form.Dock = DockStyle.Fill;
+        form.Visible = false;
+    }
 
-            var timer = new System.Windows.Forms.Timer() { Interval = 60000 };
-            timer.Tick += (s, e) => lblTime.Text = DateTime.Now.ToString("dd.MM.yyyy HH:mm");
-            timer.Start();
-
-            this.ResumeLayout(false);
-        }
-
-        private void SetupUI()
+    private void LoadDashboard()
+    {
+        // Активируем первую кнопку меню
+        if (sidebarPanel.Controls.Count > 0 && sidebarPanel.Controls[0] is Button firstButton)
         {
-            int xPos = 20;
-            int yPos = 60; // Увеличиваем отступ сверху для статусбара
-            int buttonWidth = 150;
-            int buttonHeight = 40;
-            int spacing = 10;
-
-            // Кнопка товаров
-            var btnProducts = CreateMenuButton("📦 Товары", xPos, yPos, buttonWidth, buttonHeight);
-            btnProducts.Click += (s, e) => OpenProductsForm();
-            this.Controls.Add(btnProducts);
-            xPos += buttonWidth + spacing;
-
-            // Кнопка заказов
-            var btnOrders = CreateMenuButton("📋 Заказы", xPos, yPos, buttonWidth, buttonHeight);
-            btnOrders.Click += (s, e) => OpenOrdersForm();
-            this.Controls.Add(btnOrders);
-            xPos += buttonWidth + spacing;
-
-            // Кнопка поставок
-            var btnSupplies = CreateMenuButton("🚚 Поставки", xPos, yPos, buttonWidth, buttonHeight);
-            btnSupplies.Click += (s, e) => OpenSuppliesForm();
-            this.Controls.Add(btnSupplies);
-            xPos += buttonWidth + spacing;
-
-            // Кнопка инвентаризации (ДОБАВЬ ЭТУ КНОПКУ)
-            var btnInventory = CreateMenuButton("📊 Инвентаризация", xPos, yPos, buttonWidth, buttonHeight);
-            btnInventory.Click += (s, e) => OpenInventoryForm();
-            this.Controls.Add(btnInventory);
-
-            // Следующий ряд
-            xPos = 20;
-            yPos += buttonHeight + spacing;
-
-            // Кнопка отчетов
-            var btnReports = CreateMenuButton("📈 Отчеты", xPos, yPos, buttonWidth, buttonHeight);
-            btnReports.Click += (s, e) => OpenReportsForm();
-            this.Controls.Add(btnReports);
-            xPos += buttonWidth + spacing;
-
-            // Кнопка аналитики
-            var btnAnalytics = CreateMenuButton("📊 Аналитика", xPos, yPos, buttonWidth, buttonHeight);
-            btnAnalytics.Click += (s, e) => OpenAdvancedReportsForm();
-            this.Controls.Add(btnAnalytics);
-            xPos += buttonWidth + spacing;
-
-            // Кнопка уведомлений
-            var btnNotifications = CreateMenuButton("🔔 Уведомления", xPos, yPos, buttonWidth, buttonHeight);
-            btnNotifications.Click += (s, e) => OpenNotificationsForm();
-            this.Controls.Add(btnNotifications);
-            xPos += buttonWidth + spacing;
-
-            // Кнопка пользователей (только для админов)
-            if (_currentUser.Role == UserRole.Admin)
-            {
-                var btnUsers = CreateMenuButton("👥 Пользователи", xPos, yPos, buttonWidth, buttonHeight);
-                btnUsers.Click += (s, e) => OpenUsersForm();
-                this.Controls.Add(btnUsers);
-            }
-
-            // Кнопка выхода
-            var btnLogout = new Button()
-            {
-                Text = "🚪 Выход",
-                Location = new Point(1000, 60),
-                Size = new Size(100, 30),
-                BackColor = Color.LightCoral
-            };
-            btnLogout.Click += (s, e) =>
-            {
-                var result = MessageBox.Show("Вы уверены, что хотите выйти?", "Выход",
-                    MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-                if (result == DialogResult.Yes)
-                    this.Close();
-            };
-            this.Controls.Add(btnLogout);
+            SetActiveButton(firstButton);
+            OpenForm("Dashboard");
         }
+    }
 
-        private Button CreateMenuButton(string text, int x, int y, int width, int height)
+    private GraphicsPath GetRoundedPath(Rectangle rect, int radius)
+    {
+        var path = new GraphicsPath();
+        path.AddArc(rect.X, rect.Y, radius, radius, 180, 90);
+        path.AddArc(rect.Right - radius, rect.Y, radius, radius, 270, 90);
+        path.AddArc(rect.Right - radius, rect.Bottom - radius, radius, radius, 0, 90);
+        path.AddArc(rect.X, rect.Bottom - radius, radius, radius, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
+
+    // Добавляем возможность перемещения формы
+    private bool dragging = false;
+    private Point dragCursorPoint;
+    private Point dragFormPoint;
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        if (e.Button == MouseButtons.Left && e.Y <= 60) // Только в области хедера
         {
-            return new Button()
-            {
-                Text = text,
-                Location = new Point(x, y),
-                Size = new Size(width, height),
-                Font = new Font("Arial", 10),
-                BackColor = Color.LightSteelBlue,
-                FlatStyle = FlatStyle.Flat
-            };
+            dragging = true;
+            dragCursorPoint = Cursor.Position;
+            dragFormPoint = this.Location;
         }
+        base.OnMouseDown(e);
+    }
 
-        private void ApplyUserPermissions()
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        if (dragging)
         {
-            switch (_currentUser.Role)
-            {
-                case UserRole.WarehouseWorker:
-                    DisableButton("👥 Пользователи");
-                    DisableButton("📊 Аналитика");
-                    break;
-
-                case UserRole.Viewer:
-                    DisableButton("📦 Товары");
-                    DisableButton("📋 Заказы");
-                    DisableButton("🚚 Поставки");
-                    DisableButton("📊 Инвентаризация");
-                    DisableButton("👥 Пользователи");
-                    break;
-
-                case UserRole.Manager:
-                    DisableButton("👥 Пользователи");
-                    break;
-
-                case UserRole.Admin:
-                    // Админ - полный доступ
-                    break;
-            }
+            Point dif = Point.Subtract(Cursor.Position, new Size(dragCursorPoint));
+            this.Location = Point.Add(dragFormPoint, new Size(dif));
         }
+        base.OnMouseMove(e);
+    }
 
-        private void DisableButton(string buttonText)
-        {
-            foreach (Control control in this.Controls)
-            {
-                if (control is Button button && button.Text == buttonText)
-                {
-                    button.Enabled = false;
-                    button.BackColor = Color.LightGray;
-                    button.Text = button.Text + " 🔒";
-                    break;
-                }
-            }
-        }
-
-        // Методы открытия форм (MDI)
-        private void OpenProductsForm()
-        {
-            try
-            {
-                var productsForm = new ProductsForm(_connectionString);
-                productsForm.MdiParent = this;
-                productsForm.Show();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка открытия формы товаров: {ex.Message}");
-            }
-        }
-
-        private void OpenOrdersForm()
-        {
-            try
-            {
-                var ordersForm = new OrdersForm(_connectionString);
-                ordersForm.MdiParent = this;
-                ordersForm.Show();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка открытия формы заказов: {ex.Message}");
-            }
-        }
-
-        private void OpenSuppliesForm()
-        {
-            try
-            {
-                var suppliesForm = new SuppliesForm(_connectionString);
-                suppliesForm.MdiParent = this;
-                suppliesForm.Show();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка открытия формы поставок: {ex.Message}");
-            }
-        }
-
-        private void OpenReportsForm()
-        {
-            try
-            {
-                var reportsForm = new DashboardForm(_connectionString);
-                reportsForm.MdiParent = this;
-                reportsForm.Show();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка открытия формы отчетов: {ex.Message}");
-            }
-        }
-
-        private void OpenAdvancedReportsForm()
-        {
-            try
-            {
-                var reportsForm = new AdvancedReportsForm(_connectionString);
-                reportsForm.MdiParent = this;
-                reportsForm.Show();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка открытия формы аналитики: {ex.Message}");
-            }
-        }
-
-        private void OpenNotificationsForm()
-        {
-            try
-            {
-                // Временно закомментируй, если форма не готова
-                MessageBox.Show("Форма уведомлений в разработке", "Информация");
-                // var notificationsForm = new NotificationsForm(_connectionString);
-                // notificationsForm.MdiParent = this;
-                // notificationsForm.Show();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка открытия формы уведомлений: {ex.Message}");
-            }
-        }
-
-        private void OpenUsersForm()
-        {
-            try
-            {
-                var usersForm = new UsersForm(_connectionString);
-                usersForm.MdiParent = this;
-                usersForm.Show();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка открытия формы пользователей: {ex.Message}");
-            }
-        }
-
-        // ДОБАВЬ МЕТОД ДЛЯ ИНВЕНТАРИЗАЦИИ
-        private void OpenInventoryForm()
-        {
-            try
-            {
-                var inventoryForm = new InventoryForm(_connectionString);
-                inventoryForm.MdiParent = this;
-                inventoryForm.Show();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка открытия формы инвентаризации: {ex.Message}");
-            }
-        }
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        dragging = false;
+        base.OnMouseUp(e);
     }
 }

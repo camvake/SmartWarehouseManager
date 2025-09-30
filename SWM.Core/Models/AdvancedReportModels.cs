@@ -3,81 +3,83 @@ using System.Collections.Generic;
 
 namespace SWM.Core.Models
 {
-    public class SalesTrend
-    {
-        public DateTime Period { get; set; }
-        public string PeriodDisplay { get; set; }
-        public decimal Revenue { get; set; }
-        public int OrdersCount { get; set; }
-        public int ProductsSold { get; set; }
-        public decimal AverageOrderValue { get; set; }
-    }
-
-    public class ProductPerformance
-    {
-        public int ProductID { get; set; }
-        public string ProductName { get; set; }
-        public string ArticleNumber { get; set; }
-        public string Category { get; set; }
-        public int QuantitySold { get; set; }
-        public decimal TotalRevenue { get; set; }
-        public decimal ProfitMargin { get; set; }
-        public decimal StockValue { get; set; }
-        public int CurrentStock { get; set; }
-        public decimal TurnoverRate { get; set; } // Оборачиваемость
-    }
-
-    public class SupplierAnalysis
-    {
-        public int SupplierID { get; set; }
-        public string SupplierName { get; set; }
-        public int DeliveriesCount { get; set; }
-        public decimal TotalDeliveredValue { get; set; }
-        public decimal AverageDeliveryTime { get; set; } // В днях
-        public int ProductsSupplied { get; set; }
-        public decimal ReliabilityScore { get; set; } // Оценка надежности 0-100
-    }
-
-    public class WarehouseEfficiency
-    {
-        public int WarehouseID { get; set; }
-        public string WarehouseName { get; set; }
-        public int TotalProducts { get; set; }
-        public decimal TotalValue { get; set; }
-        public int OrdersProcessed { get; set; }
-        public decimal SpaceUtilization { get; set; } // % использования
-        public decimal EfficiencyScore { get; set; } // Общая эффективность
-    }
-
     public class FinancialReport
     {
-        public DateTime PeriodStart { get; set; }
-        public DateTime PeriodEnd { get; set; }
+        public DateTime PeriodFrom { get; set; }
+        public DateTime PeriodTo { get; set; }
         public decimal TotalRevenue { get; set; }
         public decimal TotalCost { get; set; }
-        public decimal GrossProfit => TotalRevenue - TotalCost;
-        public decimal GrossMargin => TotalRevenue > 0 ? (GrossProfit / TotalRevenue) * 100 : 0;
+        public decimal GrossProfit { get; set; }
         public decimal OperatingExpenses { get; set; }
-        public decimal NetProfit => GrossProfit - OperatingExpenses;
-        public decimal NetMargin => TotalRevenue > 0 ? (NetProfit / TotalRevenue) * 100 : 0;
+        public decimal NetProfit { get; set; }
+        public decimal ProfitMargin { get; set; }
+        public List<MonthlyFinancial> MonthlyBreakdown { get; set; } = new List<MonthlyFinancial>();
     }
 
-    public class ReportFilter
+    public class MonthlyFinancial
     {
-        public DateTime StartDate { get; set; } = DateTime.Today.AddMonths(-1);
-        public DateTime EndDate { get; set; } = DateTime.Today;
-        public int? CategoryID { get; set; }
-        public int? SupplierID { get; set; }
-        public int? WarehouseID { get; set; }
-        public ReportPeriod PeriodType { get; set; } = ReportPeriod.Monthly;
+        public string Month { get; set; }
+        public decimal Revenue { get; set; }
+        public decimal Cost { get; set; }
+        public decimal Profit { get; set; }
+        public decimal Margin { get; set; }
     }
 
-    public enum ReportPeriod
+    public class SupplierPerformanceReport
     {
-        Daily = 1,
-        Weekly = 2,
-        Monthly = 3,
-        Quarterly = 4,
-        Yearly = 5
+        public DateTime PeriodFrom { get; set; }
+        public DateTime PeriodTo { get; set; }
+        public List<SupplierPerformance> SupplierPerformances { get; set; } = new List<SupplierPerformance>();
+    }
+
+    public class SupplierPerformance
+    {
+        public string SupplierName { get; set; }
+        public int TotalDeliveries { get; set; }
+        public int OnTimeDeliveries { get; set; }
+        public decimal OnTimeDeliveryRate { get; set; }
+        public decimal TotalSpent { get; set; }
+        public decimal AverageRating { get; set; }
+        public int QualityIssues { get; set; }
+        public string PerformanceStatus { get; set; }
+    }
+
+    public class InventoryTurnoverReport
+    {
+        public DateTime PeriodFrom { get; set; }
+        public DateTime PeriodTo { get; set; }
+        public decimal AverageInventory { get; set; }
+        public decimal CostOfGoodsSold { get; set; }
+        public decimal TurnoverRatio { get; set; }
+        public List<ProductTurnover> ProductTurnovers { get; set; } = new List<ProductTurnover>();
+    }
+
+    public class ProductTurnover
+    {
+        public string ProductName { get; set; }
+        public string ArticleNumber { get; set; }
+        public decimal AverageStock { get; set; }
+        public int UnitsSold { get; set; }
+        public decimal TurnoverRatio { get; set; }
+        public string TurnoverCategory { get; set; } // Высокий, Средний, Низкий
+    }
+
+    public class CustomerAnalysisReport
+    {
+        public DateTime PeriodFrom { get; set; }
+        public DateTime PeriodTo { get; set; }
+        public int TotalCustomers { get; set; }
+        public int RepeatCustomers { get; set; }
+        public decimal RepeatCustomerRate { get; set; }
+        public decimal AverageOrderValue { get; set; }
+        public List<CustomerSegment> CustomerSegments { get; set; } = new List<CustomerSegment>();
+    }
+
+    public class CustomerSegment
+    {
+        public string Segment { get; set; } // VIP, Постоянные, Новые
+        public int CustomerCount { get; set; }
+        public decimal TotalRevenue { get; set; }
+        public decimal AverageOrderValue { get; set; }
     }
 }

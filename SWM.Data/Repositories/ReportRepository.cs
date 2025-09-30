@@ -1,126 +1,181 @@
-﻿using System.Data.SQLite;
+﻿using SWM.Core.Models;
+using System;
 using System.Collections.Generic;
-using SWM.Core.Models;
+using System.Data.SQLite;
 
 namespace SWM.Data.Repositories
 {
-    public class ReportRepository : BaseRepository<object>
+    public class ReportRepository : BaseRepository
     {
         public ReportRepository(string connectionString) : base(connectionString) { }
 
-        public SalesReport GetSalesReport(DateTime startDate, DateTime endDate)
+        public SalesReport GetSalesReport(DateTime fromDate, DateTime toDate)
         {
-            var report = new SalesReport { PeriodStart = startDate, PeriodEnd = endDate };
-
-            using (var connection = GetConnection())
+            var report = new SalesReport
             {
-                connection.Open();
+                PeriodFrom = fromDate,
+                PeriodTo = toDate
+            };
 
-                string query = @"
-                    SELECT 
-                        COUNT(*) as TotalOrders,
-                        COALESCE(SUM(TotalAmount), 0) as TotalRevenue,
-                        COALESCE(SUM((SELECT SUM(Quantity) FROM OrderProducts op WHERE op.OrderID = o.OrderID)), 0) as TotalProductsSold
-                    FROM Orders o
-                    WHERE o.OrderDate BETWEEN @StartDate AND @EndDate";
+            // Общая статистика
+            var statsSql = @"
+                SELECT 
+                    COUNT(DISTINCT o.OrderID) as TotalOrders,
+                    SUM(o.FinalAmount) as TotalRevenue,
+                    SUM(oi.Quantity * (oi.UnitPrice - p.PurchasePrice)) as TotalProfit,
+                    SUM(oi.Quantity) as TotalProductsSold
+                FROM Orders o
+                LEFT JOIN OrderItems oi ON o.OrderID = oi.OrderID
+                LEFT JOIN Products p ON oi.ProductID = p.ProductID
+                WHERE o.OrderDate BETWEEN @FromDate AND @ToDate
+                AND o.StatusID IN (5, 6)"; // Доставленные заказы
 
-                using (var command = new SQLiteCommand(query, connection))
+            using (var reader = ExecuteReader(statsSql,
+                new SQLiteParameter("@FromDate", fromDate),
+                new SQLiteParameter("@ToDate", toDate)))
+            {
+                if (reader.Read())
                 {
-                    command.Parameters.AddWithValue("@StartDate", startDate);
-                    command.Parameters.AddWithValue("@EndDate", endDate);
+                    report.TotalOrders = Convert.ToInt32(reader["TotalOrders"]);
+                    report.TotalRevenue = reader["TotalRevenue"] != DBNull.Value ? Convert.ToDecimal(reader["TotalRevenue"]) : 0;
+                    report.TotalProfit = reader["TotalProfit"] != DBNull.Value ? Convert.ToDecimal(reader["TotalProfit"]) : 0;
+                    report.TotalProductsSold = reader["TotalProductsSold"] != DBNull.Value ? Convert.ToInt32(reader["TotalProductsSold"]) : 0;
+                }
+            }
 
-                    using (var reader = command.ExecuteReader())
+            // Продажи по категориям
+            var categoriesSql = @"
+                SELECT 
+                    c.CategoryName,
+                    SUM(oi.Quantity) as QuantitySold,
+                    SUM(oi.TotalPrice) as TotalRevenue
+                FROM OrderItems oi
+                LEFT JOIN Orders o ON oi.OrderID = o.OrderID
+                LEFT JOIN Products p ON oi.ProductID = p.ProductID
+                LEFT JOIN ProductCategories c ON p.CategoryID = c.CategoryID
+                WHERE o.OrderDate BETWEEN @FromDate AND @ToDate
+                AND o.StatusID IN (5, 6)
+                GROUP BY c.CategoryID, c.CategoryName
+                ORDER BY TotalRevenue DESC";
+
+            using (var reader = ExecuteReader(categoriesSql,
+                new SQLiteParameter("@FromDate", fromDate),
+                new SQLiteParameter("@ToDate", toDate)))
+            {
+                while (reader.Read())
+                {
+                    report.SalesByCategories.Add(new SalesByCategory
                     {
-                        if (reader.Read())
-                        {
-                            report.TotalOrders = reader.GetInt32(reader.GetOrdinal("TotalOrders"));
-                            report.TotalRevenue = reader.GetDecimal(reader.GetOrdinal("TotalRevenue"));
-                            report.TotalProductsSold = reader.GetInt32(reader.GetOrdinal("TotalProductsSold"));
-                            report.AverageOrderValue = report.TotalOrders > 0 ? report.TotalRevenue / report.TotalOrders : 0;
-                        }
-                    }
+                        CategoryName = reader["CategoryName"].ToString(),
+                        QuantitySold = Convert.ToInt32(reader["QuantitySold"]),
+                        TotalRevenue = Convert.ToDecimal(reader["TotalRevenue"])
+                    });
+                }
+            }
+
+            // Топ товаров
+            var topProductsSql = @"
+                SELECT 
+                    p.ProductName,
+                    p.ArticleNumber,
+                    SUM(oi.Quantity) as QuantitySold,
+                    SUM(oi.TotalPrice) as TotalRevenue,
+                    SUM(oi.Quantity * (oi.UnitPrice - p.PurchasePrice)) as Profit
+                FROM OrderItems oi
+                LEFT JOIN Orders o ON oi.OrderID = o.OrderID
+                LEFT JOIN Products p ON oi.ProductID = p.ProductID
+                WHERE o.OrderDate BETWEEN @FromDate AND @ToDate
+                AND o.StatusID IN (5, 6)
+                GROUP BY p.ProductID, p.ProductName, p.ArticleNumber
+                ORDER BY TotalRevenue DESC
+                LIMIT 10";
+
+            using (var reader = ExecuteReader(topProductsSql,
+                new SQLiteParameter("@FromDate", fromDate),
+                new SQLiteParameter("@ToDate", toDate)))
+            {
+                while (reader.Read())
+                {
+                    report.TopSellingProducts.Add(new SalesByProduct
+                    {
+                        ProductName = reader["ProductName"].ToString(),
+                        ArticleNumber = reader["ArticleNumber"].ToString(),
+                        QuantitySold = Convert.ToInt32(reader["QuantitySold"]),
+                        TotalRevenue = Convert.ToDecimal(reader["TotalRevenue"]),
+                        Profit = Convert.ToDecimal(reader["Profit"])
+                    });
                 }
             }
 
             return report;
         }
 
-        public InventoryReport GetInventoryReport()
+        public StockReport GetStockReport()
         {
-            var report = new InventoryReport();
-
-            using (var connection = GetConnection())
+            var report = new StockReport
             {
-                connection.Open();
+                ReportDate = DateTime.Now
+            };
 
-                string query = @"
-                    SELECT 
-                        COUNT(*) as TotalProducts,
-                        SUM(CASE WHEN StockBalance = 0 THEN 1 ELSE 0 END) as OutOfStock,
-                        SUM(CASE WHEN StockBalance > 0 AND StockBalance < 10 THEN 1 ELSE 0 END) as LowStock,
-                        SUM(Price * StockBalance) as TotalValue
-                    FROM Products 
-                    WHERE IsActive = 1";
+            var sql = @"
+                SELECT 
+                    COUNT(*) as TotalProducts,
+                    SUM(CASE WHEN StockBalance <= MinStockLevel THEN 1 ELSE 0 END) as LowStockProducts,
+                    SUM(CASE WHEN StockBalance = 0 THEN 1 ELSE 0 END) as OutOfStockProducts,
+                    SUM(CASE WHEN StockBalance >= MaxStockLevel THEN 1 ELSE 0 END) as OverstockProducts,
+                    SUM(StockBalance * PurchasePrice) as TotalStockValue
+                FROM Products 
+                WHERE IsActive = 1";
 
-                using (var command = new SQLiteCommand(query, connection))
-                using (var reader = command.ExecuteReader())
+            using (var reader = ExecuteReader(sql))
+            {
+                if (reader.Read())
                 {
-                    if (reader.Read())
+                    report.TotalProducts = Convert.ToInt32(reader["TotalProducts"]);
+                    report.LowStockProducts = Convert.ToInt32(reader["LowStockProducts"]);
+                    report.OutOfStockProducts = Convert.ToInt32(reader["OutOfStockProducts"]);
+                    report.OverstockProducts = Convert.ToInt32(reader["OverstockProducts"]);
+                    report.TotalStockValue = reader["TotalStockValue"] != DBNull.Value ? Convert.ToDecimal(reader["TotalStockValue"]) : 0;
+                }
+            }
+
+            // Детали по товарам
+            var detailsSql = @"
+                SELECT 
+                    ProductName,
+                    ArticleNumber,
+                    StockBalance,
+                    MinStockLevel,
+                    MaxStockLevel,
+                    (StockBalance * PurchasePrice) as StockValue,
+                    CASE 
+                        WHEN StockBalance = 0 THEN 'Нет в наличии'
+                        WHEN StockBalance <= MinStockLevel THEN 'Низкий запас'
+                        WHEN StockBalance >= MaxStockLevel THEN 'Избыток'
+                        ELSE 'Норма'
+                    END as Status
+                FROM Products 
+                WHERE IsActive = 1
+                ORDER BY StockBalance ASC";
+
+            using (var reader = ExecuteReader(detailsSql))
+            {
+                while (reader.Read())
+                {
+                    report.StockStatus.Add(new StockStatusItem
                     {
-                        report.TotalProducts = reader.GetInt32(reader.GetOrdinal("TotalProducts"));
-                        report.OutOfStockProducts = reader.GetInt32(reader.GetOrdinal("OutOfStock"));
-                        report.LowStockProducts = reader.GetInt32(reader.GetOrdinal("LowStock"));
-                        report.TotalInventoryValue = reader.GetDecimal(reader.GetOrdinal("TotalValue"));
-                    }
+                        ProductName = reader["ProductName"].ToString(),
+                        ArticleNumber = reader["ArticleNumber"].ToString(),
+                        CurrentStock = Convert.ToInt32(reader["StockBalance"]),
+                        MinStockLevel = Convert.ToInt32(reader["MinStockLevel"]),
+                        MaxStockLevel = Convert.ToInt32(reader["MaxStockLevel"]),
+                        Status = reader["Status"].ToString(),
+                        StockValue = Convert.ToDecimal(reader["StockValue"])
+                    });
                 }
             }
 
             return report;
-        }
-
-        public List<PopularProduct> GetPopularProducts(int topCount = 5)
-        {
-            var products = new List<PopularProduct>();
-
-            using (var connection = GetConnection())
-            {
-                connection.Open();
-
-                string query = @"
-                    SELECT 
-                        p.Name as ProductName,
-                        p.ArticleNumber,
-                        SUM(op.Quantity) as QuantitySold,
-                        SUM(op.TotalPrice) as TotalRevenue
-                    FROM OrderProducts op
-                    JOIN Products p ON op.ProductID = p.ProductID
-                    JOIN Orders o ON op.OrderID = o.OrderID
-                    WHERE o.OrderDate >= date('now', '-30 days')
-                    GROUP BY p.ProductID, p.Name, p.ArticleNumber
-                    ORDER BY QuantitySold DESC
-                    LIMIT @TopCount";
-
-                using (var command = new SQLiteCommand(query, connection))
-                {
-                    command.Parameters.AddWithValue("@TopCount", topCount);
-
-                    using (var reader = command.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            products.Add(new PopularProduct
-                            {
-                                ProductName = reader.GetString(reader.GetOrdinal("ProductName")),
-                                ArticleNumber = reader.GetString(reader.GetOrdinal("ArticleNumber")),
-                                QuantitySold = reader.GetInt32(reader.GetOrdinal("QuantitySold")),
-                                TotalRevenue = reader.GetDecimal(reader.GetOrdinal("TotalRevenue"))
-                            });
-                        }
-                    }
-                }
-            }
-
-            return products;
         }
     }
 }

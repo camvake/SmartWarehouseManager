@@ -1,120 +1,189 @@
-﻿using System.Data.SQLite;
+﻿using SWM.Core.Models;
+using System;
 using System.Collections.Generic;
-using SWM.Core.Models;
+using System.Data.SQLite;
 
 namespace SWM.Data.Repositories
 {
-    public class NotificationRepository : BaseRepository<Notification>
+    public class NotificationRepository : BaseRepository
     {
         public NotificationRepository(string connectionString) : base(connectionString) { }
 
-        public List<Notification> GetUnreadNotifications()
+        public List<Notification> GetUnreadNotifications(int? userId = null)
         {
             var notifications = new List<Notification>();
+            var sql = @"SELECT * FROM Notifications WHERE IsRead = 0";
 
-            using (var connection = GetConnection())
+            if (userId.HasValue)
             {
-                connection.Open();
-                string query = @"
-                    SELECT * FROM Notifications 
-                    WHERE IsRead = 0 
-                    ORDER BY CreatedDate DESC 
-                    LIMIT 50";
-
-                using (var command = new SQLiteCommand(query, connection))
-                using (var reader = command.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        notifications.Add(new Notification
-                        {
-                            NotificationID = reader.GetInt32(reader.GetOrdinal("NotificationID")),
-                            Title = reader.GetString(reader.GetOrdinal("Title")),
-                            Message = reader.GetString(reader.GetOrdinal("Message")),
-                            Type = (NotificationType)reader.GetInt32(reader.GetOrdinal("Type")),
-                            Priority = (NotificationPriority)reader.GetInt32(reader.GetOrdinal("Priority")),
-                            CreatedDate = reader.GetDateTime(reader.GetOrdinal("CreatedDate")),
-                            IsRead = reader.GetBoolean(reader.GetOrdinal("IsRead")),
-                            RelatedEntityID = reader.IsDBNull(reader.GetOrdinal("RelatedEntityID")) ?
-                                            null : (int?)reader.GetInt32(reader.GetOrdinal("RelatedEntityID")),
-                            RelatedEntityType = reader.IsDBNull(reader.GetOrdinal("RelatedEntityType")) ?
-                                              string.Empty : reader.GetString(reader.GetOrdinal("RelatedEntityType"))
-                        });
-                    }
-                }
+                sql += " AND (UserID IS NULL OR UserID = @UserID)";
             }
 
+            sql += " ORDER BY CreatedDate DESC";
+
+            var parameters = new List<SQLiteParameter>();
+            if (userId.HasValue)
+            {
+                parameters.Add(new SQLiteParameter("@UserID", userId.Value));
+            }
+
+            using (var reader = ExecuteReader(sql, parameters.ToArray()))
+            {
+                while (reader.Read())
+                {
+                    notifications.Add(MapNotification(reader));
+                }
+            }
             return notifications;
         }
 
-        public void CreateNotification(Notification notification)
+        public List<Notification> GetAllNotifications(int? userId = null, int limit = 50)
         {
-            using (var connection = GetConnection())
+            var notifications = new List<Notification>();
+            var sql = @"SELECT * FROM Notifications WHERE 1=1";
+
+            if (userId.HasValue)
             {
-                connection.Open();
-                string query = @"
-                    INSERT INTO Notifications (Title, Message, Type, Priority, CreatedDate, IsRead, RelatedEntityID, RelatedEntityType)
-                    VALUES (@Title, @Message, @Type, @Priority, @CreatedDate, @IsRead, @RelatedEntityID, @RelatedEntityType)";
+                sql += " AND (UserID IS NULL OR UserID = @UserID)";
+            }
 
-                using (var command = new SQLiteCommand(query, connection))
+            sql += " ORDER BY CreatedDate DESC LIMIT @Limit";
+
+            var parameters = new List<SQLiteParameter>
+            {
+                new SQLiteParameter("@Limit", limit)
+            };
+
+            if (userId.HasValue)
+            {
+                parameters.Add(new SQLiteParameter("@UserID", userId.Value));
+            }
+
+            using (var reader = ExecuteReader(sql, parameters.ToArray()))
+            {
+                while (reader.Read())
                 {
-                    command.Parameters.AddWithValue("@Title", notification.Title);
-                    command.Parameters.AddWithValue("@Message", notification.Message);
-                    command.Parameters.AddWithValue("@Type", (int)notification.Type);
-                    command.Parameters.AddWithValue("@Priority", (int)notification.Priority);
-                    command.Parameters.AddWithValue("@CreatedDate", DateTime.Now);
-                    command.Parameters.AddWithValue("@IsRead", false);
-                    command.Parameters.AddWithValue("@RelatedEntityID",
-                        notification.RelatedEntityID.HasValue ? (object)notification.RelatedEntityID.Value : DBNull.Value);
-                    command.Parameters.AddWithValue("@RelatedEntityType",
-                        string.IsNullOrEmpty(notification.RelatedEntityType) ? DBNull.Value : notification.RelatedEntityType);
-
-                    command.ExecuteNonQuery();
+                    notifications.Add(MapNotification(reader));
                 }
             }
+            return notifications;
+        }
+
+        public void Create(Notification notification)
+        {
+            var sql = @"
+                INSERT INTO Notifications (Title, Message, Type, Priority, RelatedID, RelatedType, UserID)
+                VALUES (@Title, @Message, @Type, @Priority, @RelatedID, @RelatedType, @UserID)";
+
+            var parameters = new[]
+            {
+                new SQLiteParameter("@Title", notification.Title),
+                new SQLiteParameter("@Message", notification.Message),
+                new SQLiteParameter("@Type", (int)notification.Type),
+                new SQLiteParameter("@Priority", (int)notification.Priority),
+                new SQLiteParameter("@RelatedID", notification.RelatedID ?? (object)DBNull.Value),
+                new SQLiteParameter("@RelatedType", notification.RelatedType ?? (object)DBNull.Value),
+                new SQLiteParameter("@UserID", notification.UserID ?? (object)DBNull.Value)
+            };
+
+            ExecuteNonQuery(sql, parameters);
         }
 
         public void MarkAsRead(int notificationId)
         {
-            using (var connection = GetConnection())
-            {
-                connection.Open();
-                string query = "UPDATE Notifications SET IsRead = 1 WHERE NotificationID = @NotificationID";
+            var sql = "UPDATE Notifications SET IsRead = 1, ReadDate = CURRENT_TIMESTAMP WHERE NotificationID = @NotificationID";
+            ExecuteNonQuery(sql, new SQLiteParameter("@NotificationID", notificationId));
+        }
 
-                using (var command = new SQLiteCommand(query, connection))
-                {
-                    command.Parameters.AddWithValue("@NotificationID", notificationId);
-                    command.ExecuteNonQuery();
-                }
+        public void MarkAllAsRead(int? userId = null)
+        {
+            var sql = "UPDATE Notifications SET IsRead = 1, ReadDate = CURRENT_TIMESTAMP WHERE IsRead = 0";
+
+            if (userId.HasValue)
+            {
+                sql += " AND (UserID IS NULL OR UserID = @UserID)";
+                ExecuteNonQuery(sql, new SQLiteParameter("@UserID", userId.Value));
+            }
+            else
+            {
+                ExecuteNonQuery(sql);
             }
         }
 
-        public void MarkAllAsRead()
+        public void Delete(int notificationId)
         {
-            using (var connection = GetConnection())
-            {
-                connection.Open();
-                string query = "UPDATE Notifications SET IsRead = 1 WHERE IsRead = 0";
+            var sql = "DELETE FROM Notifications WHERE NotificationID = @NotificationID";
+            ExecuteNonQuery(sql, new SQLiteParameter("@NotificationID", notificationId));
+        }
 
-                using (var command = new SQLiteCommand(query, connection))
+        public void DeleteOldNotifications(int daysOld)
+        {
+            var sql = "DELETE FROM Notifications WHERE CreatedDate < datetime('now', '-' || @Days || ' days')";
+            ExecuteNonQuery(sql, new SQLiteParameter("@Days", daysOld));
+        }
+
+        // Методы для создания системных уведомлений
+        public void CreateLowStockNotification(List<StockAlert> lowStockProducts)
+        {
+            foreach (var product in lowStockProducts)
+            {
+                var notification = new Notification
                 {
-                    command.ExecuteNonQuery();
-                }
+                    Title = "Низкий запас товара",
+                    Message = $"Товар {product.ProductName} ({product.ArticleNumber}) имеет низкий запас: {product.CurrentStock} шт.",
+                    Type = NotificationType.Stock,
+                    Priority = product.AlertType == "OutOfStock" ? NotificationPriority.High : NotificationPriority.Medium,
+                    RelatedID = product.ProductID,
+                    RelatedType = "Product"
+                };
+                Create(notification);
             }
         }
 
-        public int GetUnreadCount()
+        public void CreateOrderStatusNotification(int orderId, string orderNumber, string status)
         {
-            using (var connection = GetConnection())
+            var notification = new Notification
             {
-                connection.Open();
-                string query = "SELECT COUNT(*) FROM Notifications WHERE IsRead = 0";
+                Title = "Изменение статуса заказа",
+                Message = $"Статус заказа {orderNumber} изменен на: {status}",
+                Type = NotificationType.Order,
+                Priority = NotificationPriority.Medium,
+                RelatedID = orderId,
+                RelatedType = "Order"
+            };
+            Create(notification);
+        }
 
-                using (var command = new SQLiteCommand(query, connection))
-                {
-                    return Convert.ToInt32(command.ExecuteScalar());
-                }
-            }
+        public void CreateInventoryDiscrepancyNotification(int inventoryId, string inventoryNumber, int discrepanciesCount)
+        {
+            var notification = new Notification
+            {
+                Title = "Расхождения при инвентаризации",
+                Message = $"В инвентаризации {inventoryNumber} обнаружено {discrepanciesCount} расхождений",
+                Type = NotificationType.Inventory,
+                Priority = NotificationPriority.High,
+                RelatedID = inventoryId,
+                RelatedType = "Inventory"
+            };
+            Create(notification);
+        }
+
+        private Notification MapNotification(SQLiteDataReader reader)
+        {
+            return new Notification
+            {
+                NotificationID = Convert.ToInt32(reader["NotificationID"]),
+                Title = reader["Title"].ToString(),
+                Message = reader["Message"].ToString(),
+                Type = (NotificationType)Convert.ToInt32(reader["Type"]),
+                Priority = (NotificationPriority)Convert.ToInt32(reader["Priority"]),
+                RelatedID = reader["RelatedID"] != DBNull.Value ? Convert.ToInt32(reader["RelatedID"]) : null,
+                RelatedType = reader["RelatedType"]?.ToString(),
+                UserID = reader["UserID"] != DBNull.Value ? Convert.ToInt32(reader["UserID"]) : null,
+                IsRead = Convert.ToBoolean(reader["IsRead"]),
+                CreatedDate = Convert.ToDateTime(reader["CreatedDate"]),
+                ReadDate = reader["ReadDate"] != DBNull.Value ? Convert.ToDateTime(reader["ReadDate"]) : null
+            };
         }
     }
 }

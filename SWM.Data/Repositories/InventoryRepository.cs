@@ -1,249 +1,270 @@
-﻿using System.Data.SQLite;
+﻿using SWM.Core.Models;
+using System;
 using System.Collections.Generic;
-using SWM.Core.Models;
-using System.Data;
-using System.Linq;
+using System.Data.SQLite;
 
 namespace SWM.Data.Repositories
 {
-    public class InventoryRepository
+    public class InventoryRepository : BaseRepository
     {
-        private readonly string _connectionString;
+        public InventoryRepository(string connectionString) : base(connectionString) { }
 
-        public InventoryRepository(string connectionString)
+        public Inventory GetById(int inventoryId)
         {
-            _connectionString = connectionString;
-        }
+            var sql = @"
+                SELECT i.*, w.WarehouseName, u.FirstName, u.LastName
+                FROM Inventories i
+                LEFT JOIN Warehouses w ON i.WarehouseID = w.WarehouseID
+                LEFT JOIN Users u ON i.CreatedBy = u.UserID
+                WHERE i.InventoryID = @InventoryID";
 
-        private SQLiteConnection GetConnection()
-        {
-            return new SQLiteConnection(_connectionString);
-        }
-
-        public List<Inventory> GetAllInventories()
-        {
-            var inventories = new List<Inventory>();
-
-            using (var connection = GetConnection())
+            using (var reader = ExecuteReader(sql, new SQLiteParameter("@InventoryID", inventoryId)))
             {
-                connection.Open();
-                string query = @"
-                    SELECT i.*, w.Name as WarehouseName 
-                    FROM Inventories i 
-                    LEFT JOIN Warehouses w ON i.WarehouseID = w.WarehouseID 
-                    ORDER BY i.InventoryDate DESC";
-
-                using (var command = new SQLiteCommand(query, connection))
-                using (var reader = command.ExecuteReader())
+                if (reader.Read())
                 {
-                    while (reader.Read())
-                    {
-                        var inventory = new Inventory
-                        {
-                            InventoryID = GetInt(reader, "InventoryID"),
-                            InventoryNumber = GetString(reader, "InventoryNumber"),
-                            InventoryDate = GetDateTime(reader, "InventoryDate"),
-                            WarehouseID = GetInt(reader, "WarehouseID"),
-                            Status = (InventoryStatus)GetInt(reader, "Status"),
-                            Notes = GetString(reader, "Notes"),
-                            CreatedDate = GetDateTime(reader, "CreatedDate"),
-                            CompletedDate = GetNullableDateTime(reader, "CompletedDate")
-                        };
-
-                        // Загружаем элементы инвентаризации
-                        inventory.InventoryItems = GetInventoryItems(inventory.InventoryID);
-                        inventories.Add(inventory);
-                    }
+                    var inventory = MapInventory(reader);
+                    inventory.InventoryItems = GetInventoryItems(inventoryId);
+                    return inventory;
                 }
             }
+            return null;
+        }
 
+        public Inventory GetByNumber(string inventoryNumber)
+        {
+            var sql = @"
+                SELECT i.*, w.WarehouseName, u.FirstName, u.LastName
+                FROM Inventories i
+                LEFT JOIN Warehouses w ON i.WarehouseID = w.WarehouseID
+                LEFT JOIN Users u ON i.CreatedBy = u.UserID
+                WHERE i.InventoryNumber = @InventoryNumber";
+
+            using (var reader = ExecuteReader(sql, new SQLiteParameter("@InventoryNumber", inventoryNumber)))
+            {
+                if (reader.Read())
+                {
+                    var inventory = MapInventory(reader);
+                    inventory.InventoryItems = GetInventoryItems(Convert.ToInt32(reader["InventoryID"]));
+                    return inventory;
+                }
+            }
+            return null;
+        }
+
+        public List<Inventory> GetAll()
+        {
+            var inventories = new List<Inventory>();
+            var sql = @"
+                SELECT i.*, w.WarehouseName, u.FirstName, u.LastName
+                FROM Inventories i
+                LEFT JOIN Warehouses w ON i.WarehouseID = w.WarehouseID
+                LEFT JOIN Users u ON i.CreatedBy = u.UserID
+                ORDER BY i.InventoryDate DESC";
+
+            using (var reader = ExecuteReader(sql))
+            {
+                while (reader.Read())
+                {
+                    var inventory = MapInventory(reader);
+                    inventories.Add(inventory);
+                }
+            }
             return inventories;
         }
 
-        public List<InventoryItem> GetInventoryItems(int inventoryId)
+        public List<Inventory> GetByStatus(string status)
         {
-            var items = new List<InventoryItem>();
+            var inventories = new List<Inventory>();
+            var sql = @"
+                SELECT i.*, w.WarehouseName, u.FirstName, u.LastName
+                FROM Inventories i
+                LEFT JOIN Warehouses w ON i.WarehouseID = w.WarehouseID
+                LEFT JOIN Users u ON i.CreatedBy = u.UserID
+                WHERE i.Status = @Status
+                ORDER BY i.InventoryDate DESC";
 
-            using (var connection = GetConnection())
+            using (var reader = ExecuteReader(sql, new SQLiteParameter("@Status", status)))
             {
-                connection.Open();
-                string query = @"
-                    SELECT ii.*, p.Name as ProductName, p.ArticleNumber 
-                    FROM InventoryItems ii 
-                    LEFT JOIN Products p ON ii.ProductID = p.ProductID 
-                    WHERE ii.InventoryID = @InventoryID";
-
-                using (var command = new SQLiteCommand(query, connection))
+                while (reader.Read())
                 {
-                    command.Parameters.AddWithValue("@InventoryID", inventoryId);
-
-                    using (var reader = command.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            items.Add(new InventoryItem
-                            {
-                                InventoryItemID = GetInt(reader, "InventoryItemID"),
-                                InventoryID = GetInt(reader, "InventoryID"),
-                                ProductID = GetInt(reader, "ProductID"),
-                                ExpectedQuantity = GetDecimal(reader, "ExpectedQuantity"),
-                                ActualQuantity = GetDecimal(reader, "ActualQuantity"),
-                                Notes = GetString(reader, "Notes"),
-                                Product = new Product
-                                {
-                                    Name = GetString(reader, "ProductName"),
-                                    ArticleNumber = GetString(reader, "ArticleNumber")
-                                }
-                            });
-                        }
-                    }
+                    var inventory = MapInventory(reader);
+                    inventories.Add(inventory);
                 }
             }
+            return inventories;
+        }
 
+        public List<Inventory> GetByWarehouse(int warehouseId)
+        {
+            var inventories = new List<Inventory>();
+            var sql = @"
+                SELECT i.*, w.WarehouseName, u.FirstName, u.LastName
+                FROM Inventories i
+                LEFT JOIN Warehouses w ON i.WarehouseID = w.WarehouseID
+                LEFT JOIN Users u ON i.CreatedBy = u.UserID
+                WHERE i.WarehouseID = @WarehouseID
+                ORDER BY i.InventoryDate DESC";
+
+            using (var reader = ExecuteReader(sql, new SQLiteParameter("@WarehouseID", warehouseId)))
+            {
+                while (reader.Read())
+                {
+                    var inventory = MapInventory(reader);
+                    inventories.Add(inventory);
+                }
+            }
+            return inventories;
+        }
+
+        public int Create(Inventory inventory)
+        {
+            var sql = @"
+                INSERT INTO Inventories (InventoryNumber, WarehouseID, CreatedBy, Notes)
+                VALUES (@InventoryNumber, @WarehouseID, @CreatedBy, @Notes);
+                SELECT last_insert_rowid();";
+
+            var parameters = new[]
+            {
+                new SQLiteParameter("@InventoryNumber", inventory.InventoryNumber),
+                new SQLiteParameter("@WarehouseID", inventory.WarehouseID),
+                new SQLiteParameter("@CreatedBy", inventory.CreatedBy),
+                new SQLiteParameter("@Notes", inventory.Notes ?? (object)DBNull.Value)
+            };
+
+            return Convert.ToInt32(ExecuteScalar(sql, parameters));
+        }
+
+        public void CreateInventoryItem(InventoryItem item)
+        {
+            var sql = @"
+                INSERT INTO InventoryItems (InventoryID, ProductID, ExpectedQuantity, ActualQuantity, Notes)
+                VALUES (@InventoryID, @ProductID, @ExpectedQuantity, @ActualQuantity, @Notes)";
+
+            var parameters = new[]
+            {
+                new SQLiteParameter("@InventoryID", item.InventoryID),
+                new SQLiteParameter("@ProductID", item.ProductID),
+                new SQLiteParameter("@ExpectedQuantity", item.ExpectedQuantity),
+                new SQLiteParameter("@ActualQuantity", item.ActualQuantity),
+                new SQLiteParameter("@Notes", item.Notes ?? (object)DBNull.Value)
+            };
+
+            ExecuteNonQuery(sql, parameters);
+        }
+
+        public void UpdateInventoryItem(InventoryItem item)
+        {
+            var sql = @"
+                UPDATE InventoryItems 
+                SET ActualQuantity = @ActualQuantity, Notes = @Notes
+                WHERE InventoryItemID = @InventoryItemID";
+
+            var parameters = new[]
+            {
+                new SQLiteParameter("@ActualQuantity", item.ActualQuantity),
+                new SQLiteParameter("@Notes", item.Notes ?? (object)DBNull.Value),
+                new SQLiteParameter("@InventoryItemID", item.InventoryItemID)
+            };
+
+            ExecuteNonQuery(sql, parameters);
+        }
+
+        public void CompleteInventory(int inventoryId, decimal totalDiscrepancy)
+        {
+            var sql = @"
+                UPDATE Inventories 
+                SET Status = 'Завершена', CompletedDate = CURRENT_TIMESTAMP, TotalDiscrepancy = @TotalDiscrepancy
+                WHERE InventoryID = @InventoryID";
+
+            ExecuteNonQuery(sql,
+                new SQLiteParameter("@TotalDiscrepancy", totalDiscrepancy),
+                new SQLiteParameter("@InventoryID", inventoryId));
+        }
+
+        public List<InventoryItemDisplayDto> GetInventoryItemsForDisplay(int inventoryId)
+        {
+            var items = new List<InventoryItemDisplayDto>();
+            var sql = @"
+                SELECT ii.*, p.ProductName, p.ArticleNumber, p.PurchasePrice
+                FROM InventoryItems ii
+                LEFT JOIN Products p ON ii.ProductID = p.ProductID
+                WHERE ii.InventoryID = @InventoryID";
+
+            using (var reader = ExecuteReader(sql, new SQLiteParameter("@InventoryID", inventoryId)))
+            {
+                while (reader.Read())
+                {
+                    items.Add(new InventoryItemDisplayDto
+                    {
+                        InventoryItemID = Convert.ToInt32(reader["InventoryItemID"]),
+                        ProductName = reader["ProductName"].ToString(),
+                        ArticleNumber = reader["ArticleNumber"].ToString(),
+                        ExpectedQuantity = Convert.ToInt32(reader["ExpectedQuantity"]),
+                        ActualQuantity = Convert.ToInt32(reader["ActualQuantity"]),
+                        QuantityDifference = Convert.ToInt32(reader["QuantityDifference"]),
+                        CostDifference = Convert.ToDecimal(reader["CostDifference"]),
+                        Notes = reader["Notes"]?.ToString(),
+                        ProductPrice = Convert.ToDecimal(reader["PurchasePrice"])
+                    });
+                }
+            }
             return items;
         }
 
-        public int CreateInventory(Inventory inventory)
+        private List<InventoryItem> GetInventoryItems(int inventoryId)
         {
-            using (var connection = GetConnection())
+            var items = new List<InventoryItem>();
+            var sql = @"
+                SELECT ii.*, p.ProductName, p.ArticleNumber
+                FROM InventoryItems ii
+                LEFT JOIN Products p ON ii.ProductID = p.ProductID
+                WHERE ii.InventoryID = @InventoryID";
+
+            using (var reader = ExecuteReader(sql, new SQLiteParameter("@InventoryID", inventoryId)))
             {
-                connection.Open();
-                string query = @"
-                    INSERT INTO Inventories 
-                    (InventoryNumber, InventoryDate, WarehouseID, Status, Notes, CreatedDate) 
-                    VALUES 
-                    (@InventoryNumber, @InventoryDate, @WarehouseID, @Status, @Notes, @CreatedDate);
-                    SELECT last_insert_rowid();";
-
-                using (var command = new SQLiteCommand(query, connection))
+                while (reader.Read())
                 {
-                    inventory.InventoryNumber = GenerateInventoryNumber();
-                    inventory.CreatedDate = DateTime.Now;
-
-                    command.Parameters.AddWithValue("@InventoryNumber", inventory.InventoryNumber);
-                    command.Parameters.AddWithValue("@InventoryDate", inventory.InventoryDate);
-                    command.Parameters.AddWithValue("@WarehouseID", inventory.WarehouseID);
-                    command.Parameters.AddWithValue("@Status", (int)inventory.Status);
-                    command.Parameters.AddWithValue("@Notes", inventory.Notes ?? "");
-                    command.Parameters.AddWithValue("@CreatedDate", inventory.CreatedDate);
-
-                    var inventoryId = Convert.ToInt32(command.ExecuteScalar());
-                    return inventoryId;
-                }
-            }
-        }
-
-        public void AddInventoryItem(InventoryItem item)
-        {
-            using (var connection = GetConnection())
-            {
-                connection.Open();
-                string query = @"
-                    INSERT INTO InventoryItems 
-                    (InventoryID, ProductID, ExpectedQuantity, ActualQuantity, Notes) 
-                    VALUES 
-                    (@InventoryID, @ProductID, @ExpectedQuantity, @ActualQuantity, @Notes)";
-
-                using (var command = new SQLiteCommand(query, connection))
-                {
-                    command.Parameters.AddWithValue("@InventoryID", item.InventoryID);
-                    command.Parameters.AddWithValue("@ProductID", item.ProductID);
-                    command.Parameters.AddWithValue("@ExpectedQuantity", item.ExpectedQuantity);
-                    command.Parameters.AddWithValue("@ActualQuantity", item.ActualQuantity);
-                    command.Parameters.AddWithValue("@Notes", item.Notes ?? "");
-
-                    command.ExecuteNonQuery();
-                }
-            }
-        }
-
-        public void CompleteInventory(int inventoryId)
-        {
-            using (var connection = GetConnection())
-            {
-                connection.Open();
-
-                using (var transaction = connection.BeginTransaction())
-                {
-                    try
+                    items.Add(new InventoryItem
                     {
-                        // 1. Обновляем остатки товаров на основе инвентаризации
-                        var updateQuery = @"
-                            UPDATE Products 
-                            SET StockBalance = (
-                                SELECT ii.ActualQuantity 
-                                FROM InventoryItems ii 
-                                WHERE ii.ProductID = Products.ProductID AND ii.InventoryID = @InventoryID
-                            )
-                            WHERE ProductID IN (
-                                SELECT ProductID FROM InventoryItems WHERE InventoryID = @InventoryID
-                            )";
-
-                        using (var command = new SQLiteCommand(updateQuery, connection, transaction))
+                        InventoryItemID = Convert.ToInt32(reader["InventoryItemID"]),
+                        InventoryID = Convert.ToInt32(reader["InventoryID"]),
+                        ProductID = Convert.ToInt32(reader["ProductID"]),
+                        ExpectedQuantity = Convert.ToInt32(reader["ExpectedQuantity"]),
+                        ActualQuantity = Convert.ToInt32(reader["ActualQuantity"]),
+                        QuantityDifference = Convert.ToInt32(reader["QuantityDifference"]),
+                        CostDifference = Convert.ToDecimal(reader["CostDifference"]),
+                        Notes = reader["Notes"]?.ToString(),
+                        Product = new Product
                         {
-                            command.Parameters.AddWithValue("@InventoryID", inventoryId);
-                            command.ExecuteNonQuery();
+                            ProductName = reader["ProductName"].ToString(),
+                            ArticleNumber = reader["ArticleNumber"].ToString()
                         }
-
-                        // 2. Обновляем статус инвентаризации
-                        var statusQuery = @"
-                            UPDATE Inventories 
-                            SET Status = @Status, CompletedDate = @CompletedDate 
-                            WHERE InventoryID = @InventoryID";
-
-                        using (var command = new SQLiteCommand(statusQuery, connection, transaction))
-                        {
-                            command.Parameters.AddWithValue("@Status", (int)InventoryStatus.Completed);
-                            command.Parameters.AddWithValue("@CompletedDate", DateTime.Now);
-                            command.Parameters.AddWithValue("@InventoryID", inventoryId);
-                            command.ExecuteNonQuery();
-                        }
-
-                        transaction.Commit();
-                    }
-                    catch
-                    {
-                        transaction.Rollback();
-                        throw;
-                    }
+                    });
                 }
             }
+            return items;
         }
 
-        // Вспомогательные методы для безопасного чтения данных
-        private int GetInt(SQLiteDataReader reader, string column)
+        private Inventory MapInventory(SQLiteDataReader reader)
         {
-            var ordinal = reader.GetOrdinal(column);
-            return reader.IsDBNull(ordinal) ? 0 : reader.GetInt32(ordinal);
-        }
-
-        private string GetString(SQLiteDataReader reader, string column)
-        {
-            var ordinal = reader.GetOrdinal(column);
-            return reader.IsDBNull(ordinal) ? "" : reader.GetString(ordinal);
-        }
-
-        private decimal GetDecimal(SQLiteDataReader reader, string column)
-        {
-            var ordinal = reader.GetOrdinal(column);
-            return reader.IsDBNull(ordinal) ? 0 : reader.GetDecimal(ordinal);
-        }
-
-        private DateTime GetDateTime(SQLiteDataReader reader, string column)
-        {
-            var ordinal = reader.GetOrdinal(column);
-            return reader.IsDBNull(ordinal) ? DateTime.MinValue : reader.GetDateTime(ordinal);
-        }
-
-        private DateTime? GetNullableDateTime(SQLiteDataReader reader, string column)
-        {
-            var ordinal = reader.GetOrdinal(column);
-            return reader.IsDBNull(ordinal) ? null : reader.GetDateTime(ordinal);
-        }
-
-        private string GenerateInventoryNumber()
-        {
-            return "INV-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            return new Inventory
+            {
+                InventoryID = Convert.ToInt32(reader["InventoryID"]),
+                InventoryNumber = reader["InventoryNumber"].ToString(),
+                WarehouseID = Convert.ToInt32(reader["WarehouseID"]),
+                InventoryDate = Convert.ToDateTime(reader["InventoryDate"]),
+                Status = reader["Status"].ToString(),
+                CreatedBy = Convert.ToInt32(reader["CreatedBy"]),
+                CompletedDate = reader["CompletedDate"] != DBNull.Value ? Convert.ToDateTime(reader["CompletedDate"]) : null,
+                TotalDiscrepancy = Convert.ToDecimal(reader["TotalDiscrepancy"]),
+                Notes = reader["Notes"]?.ToString(),
+                Warehouse = new Warehouse { WarehouseName = reader["WarehouseName"]?.ToString() },
+                CreatedByUser = new User
+                {
+                    FirstName = reader["FirstName"]?.ToString(),
+                    LastName = reader["LastName"]?.ToString()
+                }
+            };
         }
     }
 }

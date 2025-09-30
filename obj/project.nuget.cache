@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "ums4AyFawbk=",
+  "dgSpecHash": "Mpaj92Cqop0=",
   "success": true,
-  "projectFilePath": "C:\\Users\\Doll\\OneDrive\\Desktop\\SmartWarehouseManager\\SmartWarehouseManager\\SmartWarehouseManager.csproj",
+  "projectFilePath": "C:\\Users\\Doll\\source\\repos\\SmartWarehouseManager\\SmartWarehouseManager\\SmartWarehouseManager.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\Doll\\.nuget\\packages\\stub.system.data.sqlite.core.netstandard\\1.0.119\\stub.system.data.sqlite.core.netstandard.1.0.119.nupkg.sha512",
     "C:\\Users\\Doll\\.nuget\\packages\\system.data.sqlite.core\\1.0.119\\system.data.sqlite.core.1.0.119.nupkg.sha512"

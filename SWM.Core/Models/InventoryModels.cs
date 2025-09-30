@@ -7,14 +7,24 @@ namespace SWM.Core.Models
     {
         public int InventoryID { get; set; }
         public string InventoryNumber { get; set; }
-        public DateTime InventoryDate { get; set; }
         public int WarehouseID { get; set; }
-        public InventoryStatus Status { get; set; }
-        public string Notes { get; set; }
-        public DateTime CreatedDate { get; set; }
+        public DateTime InventoryDate { get; set; }
+        public string Status { get; set; } = "В процессе";
+        public int CreatedBy { get; set; }
         public DateTime? CompletedDate { get; set; }
+        public decimal TotalDiscrepancy { get; set; }
+        public string Notes { get; set; }
 
-        public virtual List<InventoryItem> InventoryItems { get; set; } = new List<InventoryItem>();
+        // Навигационные свойства
+        public Warehouse Warehouse { get; set; }
+        public User CreatedByUser { get; set; }
+        public List<InventoryItem> InventoryItems { get; set; } = new List<InventoryItem>();
+
+        // Вычисляемые свойства
+        public bool IsCompleted => Status == "Завершена";
+        public bool IsInProgress => Status == "В процессе";
+        public int ItemsCount => InventoryItems?.Count ?? 0;
+        public int DiscrepanciesCount => InventoryItems?.Count(i => i.QuantityDifference != 0) ?? 0;
     }
 
     public class InventoryItem
@@ -22,25 +32,18 @@ namespace SWM.Core.Models
         public int InventoryItemID { get; set; }
         public int InventoryID { get; set; }
         public int ProductID { get; set; }
-        public decimal ExpectedQuantity { get; set; }
-        public decimal ActualQuantity { get; set; }
-        public decimal Difference => ActualQuantity - ExpectedQuantity;
+        public int ExpectedQuantity { get; set; }
+        public int ActualQuantity { get; set; }
+        public int QuantityDifference { get; set; }
+        public decimal CostDifference { get; set; }
         public string Notes { get; set; }
 
         // Навигационные свойства
-        public virtual Inventory Inventory { get; set; }
-        public virtual Product Product { get; set; }
+        public Inventory Inventory { get; set; }
+        public Product Product { get; set; }
 
-        // Вычисляемые свойства для отображения в форме
-        public string ProductName => Product?.Name;
-        public string ArticleNumber => Product?.ArticleNumber;
+        // Вычисляемые свойства
+        public bool HasDiscrepancy => QuantityDifference != 0;
+        public string DiscrepancyType => QuantityDifference > 0 ? "Излишек" : QuantityDifference < 0 ? "Недостача" : "Нет расхождений";
     }
-
-    public enum InventoryStatus
-    {
-        Draft = 0,
-        InProgress = 1,
-        Completed = 2,
-        Cancelled = 3
-    }
-}
+}   

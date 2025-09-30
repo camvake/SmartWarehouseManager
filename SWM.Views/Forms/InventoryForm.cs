@@ -23,6 +23,7 @@ namespace SWM.Views.Forms
 
         private Inventory _currentInventory;
         private List<InventoryItem> _inventoryItems;
+        private List<InventoryItemDisplayDto> _inventoryDisplayItems;
 
         public InventoryForm(string connectionString)
         {
@@ -32,15 +33,17 @@ namespace SWM.Views.Forms
 
             _currentInventory = new Inventory
             {
+                InventoryNumber = GenerateInventoryNumber(),
                 InventoryDate = DateTime.Today,
-                Status = InventoryStatus.Draft
+                Status = InventoryStatus.Draft,
+                CreatedDate = DateTime.Now
             };
 
             _inventoryItems = new List<InventoryItem>();
+            _inventoryDisplayItems = new List<InventoryItemDisplayDto>();
 
             InitializeComponent();
             LoadWarehouses();
-            LoadProductsForInventory();
         }
 
         private void InitializeComponent()
@@ -48,9 +51,11 @@ namespace SWM.Views.Forms
             this.SuspendLayout();
 
             this.Text = "📋 Проведение инвентаризации";
-            this.ClientSize = new Size(900, 600);
+            this.ClientSize = new Size(1000, 650);
             this.StartPosition = FormStartPosition.CenterParent;
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.MaximizeBox = false;
+            this.MinimizeBox = false;
 
             CreateControls();
             this.ResumeLayout(false);
@@ -58,139 +63,200 @@ namespace SWM.Views.Forms
 
         private void CreateControls()
         {
-            int yPos = 20;
-
             // Заголовок
             var lblTitle = new Label()
             {
-                Text = "Инвентаризация склада",
-                Location = new Point(20, yPos),
-                Font = new Font("Arial", 12, FontStyle.Bold),
-                AutoSize = true
+                Text = "📦 ИНВЕНТАРИЗАЦИЯ СКЛАДА",
+                Location = new Point(20, 15),
+                Font = new Font("Arial", 14, FontStyle.Bold),
+                AutoSize = true,
+                ForeColor = Color.DarkBlue
             };
-            yPos += 40;
 
-            // Информация об инвентаризации
+            // Панель информации
             var infoPanel = new Panel()
             {
-                Location = new Point(20, yPos),
-                Size = new Size(850, 80),
-                BorderStyle = BorderStyle.FixedSingle
+                Location = new Point(20, 50),
+                Size = new Size(960, 100),
+                BorderStyle = BorderStyle.FixedSingle,
+                BackColor = Color.WhiteSmoke
             };
 
-            var lblNumber = new Label() { Text = "Номер:", Location = new Point(10, 15), Width = 80 };
+            // Номер инвентаризации
+            var lblNumber = new Label()
+            {
+                Text = "Номер:",
+                Location = new Point(15, 15),
+                Width = 80,
+                Font = new Font("Arial", 9, FontStyle.Bold)
+            };
             txtInventoryNumber = new TextBox()
             {
-                Location = new Point(95, 12),
-                Width = 150,
-                Text = GenerateInventoryNumber(),
+                Location = new Point(100, 12),
+                Width = 180,
+                Text = _currentInventory.InventoryNumber,
                 ReadOnly = true,
-                BackColor = Color.LightGray
+                BackColor = Color.LightGray,
+                Font = new Font("Arial", 9)
             };
 
-            var lblWarehouse = new Label() { Text = "Склад:", Location = new Point(260, 15), Width = 50 };
+            // Склад
+            var lblWarehouse = new Label()
+            {
+                Text = "Склад:",
+                Location = new Point(300, 15),
+                Width = 50,
+                Font = new Font("Arial", 9, FontStyle.Bold)
+            };
             cmbWarehouse = new ComboBox()
             {
-                Location = new Point(315, 12),
-                Width = 200,
-                DropDownStyle = ComboBoxStyle.DropDownList
+                Location = new Point(355, 12),
+                Width = 250,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Font = new Font("Arial", 9)
             };
+            cmbWarehouse.SelectedIndexChanged += CmbWarehouse_SelectedIndexChanged;
 
-            var lblDate = new Label() { Text = "Дата:", Location = new Point(530, 15), Width = 40 };
+            // Дата инвентаризации
+            var lblDate = new Label()
+            {
+                Text = "Дата:",
+                Location = new Point(625, 15),
+                Width = 40,
+                Font = new Font("Arial", 9, FontStyle.Bold)
+            };
             dtpInventoryDate = new DateTimePicker()
             {
-                Location = new Point(575, 12),
-                Width = 120
+                Location = new Point(670, 12),
+                Width = 130,
+                Font = new Font("Arial", 9),
+                Value = DateTime.Today
             };
 
-            var lblNotes = new Label() { Text = "Примечания:", Location = new Point(10, 45), Width = 80 };
+            // Примечания
+            var lblNotes = new Label()
+            {
+                Text = "Примечания:",
+                Location = new Point(15, 55),
+                Width = 80,
+                Font = new Font("Arial", 9, FontStyle.Bold)
+            };
             txtNotes = new TextBox()
             {
-                Location = new Point(95, 42),
-                Width = 600,
-                Height = 25
+                Location = new Point(100, 52),
+                Width = 700,
+                Height = 25,
+                Font = new Font("Arial", 9)
             };
 
             infoPanel.Controls.AddRange(new Control[] {
                 lblNumber, txtInventoryNumber, lblWarehouse, cmbWarehouse,
                 lblDate, dtpInventoryDate, lblNotes, txtNotes
             });
-            yPos += 90;
 
             // Статус
             lblStatus = new Label()
             {
-                Text = "Статус: Черновик",
-                Location = new Point(20, yPos),
+                Text = "🟦 Статус: ЧЕРНОВИК",
+                Location = new Point(20, 160),
                 Font = new Font("Arial", 10, FontStyle.Bold),
                 AutoSize = true,
                 ForeColor = Color.Blue
             };
-            yPos += 30;
 
-            // Товары для инвентаризации
+            // Заголовок таблицы товаров
             var lblItems = new Label()
             {
-                Text = "Товары для инвентаризации:",
-                Location = new Point(20, yPos),
-                Font = new Font("Arial", 10, FontStyle.Bold)
+                Text = "📋 ТОВАРЫ ДЛЯ ИНВЕНТАРИЗАЦИИ",
+                Location = new Point(20, 190),
+                Font = new Font("Arial", 11, FontStyle.Bold),
+                AutoSize = true,
+                ForeColor = Color.DarkGreen
             };
-            yPos += 25;
 
+            // Таблица товаров
             gridInventoryItems = new DataGridView()
             {
-                Location = new Point(20, yPos),
-                Size = new Size(850, 300),
-                AllowUserToAddRows = false
+                Location = new Point(20, 220),
+                Size = new Size(960, 300),
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                ReadOnly = false,
+                BackgroundColor = Color.White,
+                BorderStyle = BorderStyle.Fixed3D,
+                Font = new Font("Arial", 9)
             };
-            yPos += 310;
 
-            // Кнопки
+            // Панель кнопок
             var buttonsPanel = new Panel()
             {
-                Location = new Point(20, yPos),
-                Size = new Size(850, 40)
+                Location = new Point(20, 535),
+                Size = new Size(960, 50),
+                BackColor = Color.WhiteSmoke
             };
 
             btnStartInventory = new Button()
             {
-                Text = "▶️ Начать инвентаризацию",
-                Location = new Point(0, 5),
-                Size = new Size(160, 30),
-                BackColor = Color.LightGreen
+                Text = "▶️ НАЧАТЬ ИНВЕНТАРИЗАЦИЮ",
+                Location = new Point(10, 10),
+                Size = new Size(200, 35),
+                BackColor = Color.LightGreen,
+                Font = new Font("Arial", 9, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat
             };
             btnStartInventory.Click += BtnStartInventory_Click;
 
             btnAddProduct = new Button()
             {
-                Text = "➕ Добавить товар",
-                Location = new Point(170, 5),
-                Size = new Size(140, 30)
+                Text = "➕ ДОБАВИТЬ ТОВАР",
+                Location = new Point(220, 10),
+                Size = new Size(150, 35),
+                BackColor = Color.LightYellow,
+                Font = new Font("Arial", 9),
+                FlatStyle = FlatStyle.Flat
             };
             btnAddProduct.Click += BtnAddProduct_Click;
 
             btnComplete = new Button()
             {
-                Text = "✅ Завершить",
-                Location = new Point(320, 5),
-                Size = new Size(100, 30),
+                Text = "✅ ЗАВЕРШИТЬ",
+                Location = new Point(380, 10),
+                Size = new Size(120, 35),
                 BackColor = Color.LightBlue,
+                Font = new Font("Arial", 9, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
                 Enabled = false
             };
             btnComplete.Click += BtnComplete_Click;
 
             btnCancel = new Button()
             {
-                Text = "❌ Отмена",
-                Location = new Point(430, 5),
-                Size = new Size(100, 30)
+                Text = "❌ ОТМЕНА",
+                Location = new Point(510, 10),
+                Size = new Size(120, 35),
+                BackColor = Color.LightCoral,
+                Font = new Font("Arial", 9),
+                FlatStyle = FlatStyle.Flat
             };
             btnCancel.Click += (s, e) => this.DialogResult = DialogResult.Cancel;
 
+            // Кнопка обновления
+            var btnRefresh = new Button()
+            {
+                Text = "🔄 ОБНОВИТЬ",
+                Location = new Point(640, 10),
+                Size = new Size(120, 35),
+                BackColor = Color.LightGray,
+                Font = new Font("Arial", 9),
+                FlatStyle = FlatStyle.Flat
+            };
+            btnRefresh.Click += (s, e) => LoadProductsForInventory();
+
             buttonsPanel.Controls.AddRange(new Control[] {
-                btnStartInventory, btnAddProduct, btnComplete, btnCancel
+                btnStartInventory, btnAddProduct, btnComplete, btnCancel, btnRefresh
             });
 
+            // Добавляем все контролы на форму
             this.Controls.AddRange(new Control[] {
                 lblTitle, infoPanel, lblStatus, lblItems, gridInventoryItems, buttonsPanel
             });
@@ -200,36 +266,81 @@ namespace SWM.Views.Forms
 
         private void LoadWarehouses()
         {
-            // Временные данные - замени на реальные из БД
-            cmbWarehouse.Items.Add(new { Name = "Основной склад", WarehouseID = 1 });
-            cmbWarehouse.Items.Add(new { Name = "Резервный склад", WarehouseID = 2 });
-            cmbWarehouse.DisplayMember = "Name";
-            cmbWarehouse.ValueMember = "WarehouseID";
-            cmbWarehouse.SelectedIndex = 0;
+            try
+            {
+                cmbWarehouse.Items.Clear();
+
+                // Временные данные - замените на реальные из вашего репозитория
+                cmbWarehouse.Items.Add(new { Name = "Основной склад", WarehouseID = 1 });
+                cmbWarehouse.Items.Add(new { Name = "Резервный склад", WarehouseID = 2 });
+                cmbWarehouse.Items.Add(new { Name = "Склад готовой продукции", WarehouseID = 3 });
+
+                cmbWarehouse.DisplayMember = "Name";
+                cmbWarehouse.ValueMember = "WarehouseID";
+
+                if (cmbWarehouse.Items.Count > 0)
+                    cmbWarehouse.SelectedIndex = 0;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка загрузки складов: {ex.Message}", "Ошибка",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void CmbWarehouse_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (cmbWarehouse.SelectedItem != null && _currentInventory.Status == InventoryStatus.Draft)
+            {
+                LoadProductsForInventory();
+            }
         }
 
         private void LoadProductsForInventory()
         {
-            var products = _productRepo.GetAllProducts();
-            var warehouseId = ((dynamic)cmbWarehouse.SelectedItem).WarehouseID;
-
-            var warehouseProducts = products.Where(p => p.WarehouseID == warehouseId).ToList();
-
-            _inventoryItems.Clear();
-            foreach (var product in warehouseProducts)
+            try
             {
-                _inventoryItems.Add(new InventoryItem
-                {
-                    ProductID = product.ProductID,
-                    ProductName = product.Name,
-                    ArticleNumber = product.ArticleNumber,
-                    ExpectedQuantity = product.StockBalance,
-                    ActualQuantity = product.StockBalance,
-                    Notes = ""
-                });
-            }
+                if (cmbWarehouse.SelectedItem == null) return;
 
-            gridInventoryItems.DataSource = _inventoryItems.ToList();
+                var products = _productRepo.GetAllProducts();
+                var warehouseId = ((dynamic)cmbWarehouse.SelectedItem).WarehouseID;
+
+                var warehouseProducts = products.Where(p => p.WarehouseID == warehouseId && p.IsActive).ToList();
+
+                _inventoryDisplayItems.Clear();
+                _inventoryItems.Clear();
+
+                foreach (var product in warehouseProducts)
+                {
+                    // Для отображения в grid
+                    _inventoryDisplayItems.Add(new InventoryItemDisplayDto
+                    {
+                        ProductID = product.ProductID,
+                        ProductName = product.Name,
+                        ArticleNumber = product.ArticleNumber,
+                        ExpectedQuantity = product.StockBalance,
+                        ActualQuantity = product.StockBalance,
+                        Notes = ""
+                    });
+
+                    // Для сохранения в БД
+                    _inventoryItems.Add(new InventoryItem
+                    {
+                        ProductID = product.ProductID,
+                        ExpectedQuantity = product.StockBalance,
+                        ActualQuantity = product.StockBalance,
+                        Notes = ""
+                    });
+                }
+
+                gridInventoryItems.DataSource = _inventoryDisplayItems.ToList();
+                UpdateStatusInfo();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка загрузки товаров: {ex.Message}", "Ошибка",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void SetupInventoryGrid()
@@ -237,53 +348,102 @@ namespace SWM.Views.Forms
             gridInventoryItems.AutoGenerateColumns = false;
             gridInventoryItems.Columns.Clear();
 
+            // Товар
             gridInventoryItems.Columns.Add(new DataGridViewTextBoxColumn()
             {
                 DataPropertyName = "ProductName",
-                HeaderText = "Товар",
-                Width = 200,
-                ReadOnly = true
+                HeaderText = "НАИМЕНОВАНИЕ ТОВАРА",
+                Width = 250,
+                ReadOnly = true,
+                DefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.WhiteSmoke }
             });
 
+            // Артикул
             gridInventoryItems.Columns.Add(new DataGridViewTextBoxColumn()
             {
                 DataPropertyName = "ArticleNumber",
-                HeaderText = "Артикул",
-                Width = 100,
-                ReadOnly = true
+                HeaderText = "АРТИКУЛ",
+                Width = 120,
+                ReadOnly = true,
+                DefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.WhiteSmoke }
             });
 
+            // Ожидается
             gridInventoryItems.Columns.Add(new DataGridViewTextBoxColumn()
             {
                 DataPropertyName = "ExpectedQuantity",
-                HeaderText = "Ожидается",
-                Width = 80,
-                ReadOnly = true
+                HeaderText = "ОЖИДАЕТСЯ",
+                Width = 100,
+                ReadOnly = true,
+                DefaultCellStyle = new DataGridViewCellStyle
+                {
+                    BackColor = Color.WhiteSmoke,
+                    Alignment = DataGridViewContentAlignment.MiddleRight,
+                    Format = "N0"
+                }
             });
 
+            // Фактически
             gridInventoryItems.Columns.Add(new DataGridViewTextBoxColumn()
             {
                 DataPropertyName = "ActualQuantity",
-                HeaderText = "Фактически",
-                Width = 80
+                HeaderText = "ФАКТИЧЕСКИ",
+                Width = 100,
+                DefaultCellStyle = new DataGridViewCellStyle
+                {
+                    Alignment = DataGridViewContentAlignment.MiddleRight,
+                    Format = "N0"
+                }
             });
 
+            // Разница
             gridInventoryItems.Columns.Add(new DataGridViewTextBoxColumn()
             {
                 DataPropertyName = "Difference",
-                HeaderText = "Разница",
-                Width = 80,
-                ReadOnly = true
+                HeaderText = "РАЗНИЦА",
+                Width = 100,
+                ReadOnly = true,
+                DefaultCellStyle = new DataGridViewCellStyle
+                {
+                    Alignment = DataGridViewContentAlignment.MiddleRight,
+                    Format = "N0"
+                }
             });
 
+            // Примечание
             gridInventoryItems.Columns.Add(new DataGridViewTextBoxColumn()
             {
                 DataPropertyName = "Notes",
-                HeaderText = "Примечание",
-                Width = 200
+                HeaderText = "ПРИМЕЧАНИЕ",
+                Width = 250
             });
 
             gridInventoryItems.CellValueChanged += GridInventoryItems_CellValueChanged;
+            gridInventoryItems.CellFormatting += GridInventoryItems_CellFormatting;
+        }
+
+        private void GridInventoryItems_CellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
+        {
+            if (e.RowIndex >= 0 && e.ColumnIndex == 4) // Колонка "Разница"
+            {
+                if (e.Value != null && decimal.TryParse(e.Value.ToString(), out decimal difference))
+                {
+                    if (difference < 0)
+                    {
+                        e.CellStyle.ForeColor = Color.Red;
+                        e.CellStyle.Font = new Font(gridInventoryItems.Font, FontStyle.Bold);
+                    }
+                    else if (difference > 0)
+                    {
+                        e.CellStyle.ForeColor = Color.Green;
+                        e.CellStyle.Font = new Font(gridInventoryItems.Font, FontStyle.Bold);
+                    }
+                    else
+                    {
+                        e.CellStyle.ForeColor = Color.Black;
+                    }
+                }
+            }
         }
 
         private void GridInventoryItems_CellValueChanged(object sender, DataGridViewCellEventArgs e)
@@ -295,7 +455,14 @@ namespace SWM.Views.Forms
                 var actual = Convert.ToDecimal(row.Cells[3].Value);
                 row.Cells[4].Value = actual - expected;
 
-                // Подсветка расхождений
+                // Обновляем соответствующий элемент в списке для БД
+                if (e.RowIndex < _inventoryItems.Count)
+                {
+                    _inventoryItems[e.RowIndex].ActualQuantity = actual;
+                    _inventoryItems[e.RowIndex].Notes = row.Cells[5].Value?.ToString() ?? "";
+                }
+
+                // Подсветка строки
                 if (actual != expected)
                 {
                     row.DefaultCellStyle.BackColor = actual < expected ? Color.LightCoral : Color.LightGreen;
@@ -304,23 +471,39 @@ namespace SWM.Views.Forms
                 {
                     row.DefaultCellStyle.BackColor = Color.White;
                 }
+
+                UpdateStatusInfo();
             }
         }
 
         private void BtnStartInventory_Click(object sender, EventArgs e)
         {
+            if (cmbWarehouse.SelectedItem == null)
+            {
+                MessageBox.Show("Выберите склад для инвентаризации!", "Внимание",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (_inventoryDisplayItems.Count == 0)
+            {
+                MessageBox.Show("Нет товаров для инвентаризации на выбранном складе!", "Внимание",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             _currentInventory.Status = InventoryStatus.InProgress;
             _currentInventory.InventoryDate = dtpInventoryDate.Value;
             _currentInventory.WarehouseID = ((dynamic)cmbWarehouse.SelectedItem).WarehouseID;
             _currentInventory.Notes = txtNotes.Text;
 
-            lblStatus.Text = "Статус: В процессе";
-            lblStatus.ForeColor = Color.Orange;
+            UpdateStatusInfo();
 
             btnStartInventory.Enabled = false;
             btnComplete.Enabled = true;
             cmbWarehouse.Enabled = false;
             dtpInventoryDate.Enabled = false;
+            txtNotes.Enabled = false;
 
             MessageBox.Show("Инвентаризация начата! Теперь можно вносить фактические данные.", "Инвентаризация",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -328,63 +511,131 @@ namespace SWM.Views.Forms
 
         private void BtnAddProduct_Click(object sender, EventArgs e)
         {
-            // Диалог добавления товара
+            if (_currentInventory.Status != InventoryStatus.InProgress)
+            {
+                MessageBox.Show("Сначала начните инвентаризацию!", "Внимание",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             using (var form = new Form())
             {
-                form.Text = "Добавить товар в инвентаризацию";
-                form.Size = new Size(400, 200);
+                form.Text = "➕ ДОБАВИТЬ ТОВАР В ИНВЕНТАРИЗАЦИЮ";
+                form.Size = new Size(450, 200);
                 form.StartPosition = FormStartPosition.CenterParent;
+                form.FormBorderStyle = FormBorderStyle.FixedDialog;
+                form.MaximizeBox = false;
+                form.MinimizeBox = false;
 
-                var lblProduct = new Label() { Text = "Товар:", Location = new Point(20, 30), Width = 80 };
+                var lblProduct = new Label()
+                {
+                    Text = "Товар:",
+                    Location = new Point(20, 25),
+                    Width = 80,
+                    Font = new Font("Arial", 9, FontStyle.Bold)
+                };
                 var cmbProduct = new ComboBox()
                 {
-                    Location = new Point(100, 27),
-                    Width = 250,
-                    DropDownStyle = ComboBoxStyle.DropDownList
+                    Location = new Point(100, 22),
+                    Width = 300,
+                    DropDownStyle = ComboBoxStyle.DropDownList,
+                    Font = new Font("Arial", 9)
                 };
 
-                var products = _productRepo.GetAllProducts();
-                cmbProduct.DataSource = products;
+                var lblQuantity = new Label()
+                {
+                    Text = "Количество:",
+                    Location = new Point(20, 65),
+                    Width = 80,
+                    Font = new Font("Arial", 9, FontStyle.Bold)
+                };
+                var numQuantity = new NumericUpDown()
+                {
+                    Location = new Point(100, 62),
+                    Width = 120,
+                    Minimum = 0,
+                    Maximum = 100000,
+                    DecimalPlaces = 0,
+                    Font = new Font("Arial", 9)
+                };
+
+                var btnOk = new Button()
+                {
+                    Text = "ДОБАВИТЬ",
+                    Location = new Point(100, 110),
+                    Size = new Size(100, 30),
+                    DialogResult = DialogResult.OK,
+                    BackColor = Color.LightGreen,
+                    Font = new Font("Arial", 9, FontStyle.Bold)
+                };
+                var btnCancel = new Button()
+                {
+                    Text = "ОТМЕНА",
+                    Location = new Point(210, 110),
+                    Size = new Size(100, 30),
+                    DialogResult = DialogResult.Cancel,
+                    BackColor = Color.LightCoral,
+                    Font = new Font("Arial", 9)
+                };
+
+                // Загружаем все товары
+                var allProducts = _productRepo.GetAllProducts().Where(p => p.IsActive).ToList();
+                var existingProductIds = _inventoryDisplayItems.Select(i => i.ProductID).ToHashSet();
+                var availableProducts = allProducts.Where(p => !existingProductIds.Contains(p.ProductID)).ToList();
+
+                cmbProduct.DataSource = availableProducts;
                 cmbProduct.DisplayMember = "Name";
                 cmbProduct.ValueMember = "ProductID";
 
-                var lblQuantity = new Label() { Text = "Количество:", Location = new Point(20, 70), Width = 80 };
-                var numQuantity = new NumericUpDown()
+                if (availableProducts.Count == 0)
                 {
-                    Location = new Point(100, 67),
-                    Width = 100,
-                    Minimum = 0,
-                    Maximum = 10000
-                };
-
-                var btnOk = new Button() { Text = "Добавить", Location = new Point(100, 110), DialogResult = DialogResult.OK };
-                var btnCancel = new Button() { Text = "Отмена", Location = new Point(200, 110), DialogResult = DialogResult.Cancel };
+                    MessageBox.Show("Нет доступных товаров для добавления!", "Внимание",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
 
                 form.Controls.AddRange(new Control[] {
                     lblProduct, cmbProduct, lblQuantity, numQuantity, btnOk, btnCancel
                 });
 
-                if (form.ShowDialog() == DialogResult.OK && cmbProduct.SelectedItem is Product product)
+                if (form.ShowDialog() == DialogResult.OK && cmbProduct.SelectedItem != null)
                 {
-                    _inventoryItems.Add(new InventoryItem
+                    // Используем dynamic чтобы обойти проблему с пространством имен
+                    dynamic product = cmbProduct.SelectedItem;
+
+                    // Для отображения
+                    _inventoryDisplayItems.Add(new InventoryItemDisplayDto
                     {
                         ProductID = product.ProductID,
                         ProductName = product.Name,
                         ArticleNumber = product.ArticleNumber,
                         ExpectedQuantity = 0,
-                        ActualQuantity = (int)numQuantity.Value,
+                        ActualQuantity = (decimal)numQuantity.Value,
                         Notes = "Добавлен вручную"
                     });
 
-                    gridInventoryItems.DataSource = _inventoryItems.ToList();
+                    // Для сохранения в БД
+                    _inventoryItems.Add(new InventoryItem
+                    {
+                        ProductID = product.ProductID,
+                        ExpectedQuantity = 0,
+                        ActualQuantity = (decimal)numQuantity.Value,
+                        Notes = "Добавлен вручную"
+                    });
+
+                    gridInventoryItems.DataSource = _inventoryDisplayItems.ToList();
+                    UpdateStatusInfo();
                 }
             }
         }
 
         private void BtnComplete_Click(object sender, EventArgs e)
         {
-            var result = MessageBox.Show("Завершить инвентаризацию? После завершения изменения будут сохранены.",
-                "Завершение инвентаризации", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            var result = MessageBox.Show(
+                "Завершить инвентаризацию?\n\nПосле завершения все данные будут сохранены в базу данных.",
+                "ЗАВЕРШЕНИЕ ИНВЕНТАРИЗАЦИИ",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
 
             if (result == DialogResult.Yes)
             {
@@ -394,29 +645,92 @@ namespace SWM.Views.Forms
                     _currentInventory.InventoryItems = _inventoryItems;
                     var inventoryId = _inventoryRepo.CreateInventory(_currentInventory);
 
-                    // Завершаем инвентаризацию (обновляем остатки)
+                    // Завершаем инвентаризацию
                     _inventoryRepo.CompleteInventory(inventoryId);
 
-                    lblStatus.Text = "Статус: Завершена ✅";
-                    lblStatus.ForeColor = Color.Green;
+                    _currentInventory.Status = InventoryStatus.Completed;
+                    _currentInventory.CompletedDate = DateTime.Now;
 
-                    MessageBox.Show("Инвентаризация успешно завершена!", "Успех",
-                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    UpdateStatusInfo();
+
+                    MessageBox.Show($"Инвентаризация №{_currentInventory.InventoryNumber} успешно завершена!\n\n" +
+                                  $"Обработано товаров: {_inventoryItems.Count}",
+                                  "✅ ИНВЕНТАРИЗАЦИЯ ЗАВЕРШЕНА",
+                                  MessageBoxButtons.OK,
+                                  MessageBoxIcon.Information);
 
                     this.DialogResult = DialogResult.OK;
                     this.Close();
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Ошибка при завершении инвентаризации: {ex.Message}", "Ошибка",
+                    MessageBox.Show($"Ошибка при завершении инвентаризации:\n{ex.Message}", "❌ ОШИБКА",
                         MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
+        }
+
+        private void UpdateStatusInfo()
+        {
+            var totalItems = _inventoryDisplayItems.Count;
+            var withDifferences = _inventoryDisplayItems.Count(i => i.Difference != 0);
+            var totalDifference = _inventoryDisplayItems.Sum(i => i.Difference);
+
+            string statusText = _currentInventory.Status switch
+            {
+                InventoryStatus.Draft => "🟦 Статус: ЧЕРНОВИК",
+                InventoryStatus.InProgress => "🟧 Статус: В ПРОЦЕССЕ",
+                InventoryStatus.Completed => "🟩 Статус: ЗАВЕРШЕНА",
+                InventoryStatus.Cancelled => "🟥 Статус: ОТМЕНЕНА",
+                _ => "Статус: НЕИЗВЕСТЕН"
+            };
+
+            string details = $"\nТоваров: {totalItems} | С расхождениями: {withDifferences} | Общая разница: {totalDifference}";
+
+            lblStatus.Text = statusText + details;
+            lblStatus.ForeColor = _currentInventory.Status switch
+            {
+                InventoryStatus.Draft => Color.Blue,
+                InventoryStatus.InProgress => Color.Orange,
+                InventoryStatus.Completed => Color.Green,
+                InventoryStatus.Cancelled => Color.Red,
+                _ => Color.Black
+            };
         }
 
         private string GenerateInventoryNumber()
         {
             return "INV-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
         }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (_currentInventory.Status == InventoryStatus.InProgress &&
+                this.DialogResult != DialogResult.OK)
+            {
+                var result = MessageBox.Show(
+                    "Инвентаризация еще не завершена. Все внесенные данные будут потеряны.\n\nПродолжить?",
+                    "ПРЕДУПРЕЖДЕНИЕ",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning);
+
+                if (result == DialogResult.No)
+                {
+                    e.Cancel = true;
+                }
+            }
+            base.OnFormClosing(e);
+        }
+    }
+
+    public class InventoryItemDisplayDto
+    {
+        public int ProductID { get; set; }
+        public string ProductName { get; set; }
+        public string ArticleNumber { get; set; }
+        public decimal ExpectedQuantity { get; set; }
+        public decimal ActualQuantity { get; set; }
+        public string Notes { get; set; }
+        public decimal Difference => ActualQuantity - ExpectedQuantity;
     }
 }

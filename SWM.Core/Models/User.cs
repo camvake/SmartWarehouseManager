@@ -6,19 +6,36 @@ namespace SWM.Core.Models
     {
         public int UserID { get; set; }
         public string Login { get; set; }
+        public string Email { get; set; }
         public string PasswordHash { get; set; }
+        public string PasswordSalt { get; set; }
         public string FirstName { get; set; }
         public string LastName { get; set; }
-        public string Email { get; set; }
         public string PhoneNumber { get; set; }
         public UserRole Role { get; set; }
+        public int? WarehouseID { get; set; }
+        public DateTime? LastLoginDate { get; set; }
+        public DateTime CreatedDate { get; set; }
+        public DateTime UpdatedDate { get; set; }
         public bool IsActive { get; set; } = true;
-        public DateTime DateCreated { get; set; } = DateTime.Now;
 
+        // Навигационные свойства
+        public Warehouse Warehouse { get; set; }
         public string FullName => $"{FirstName} {LastName}";
-        public string RoleDisplay => GetRoleDisplayName(Role);
+        public string RoleDisplay => Role.GetDisplayName();
+    }
 
-        private string GetRoleDisplayName(UserRole role)
+    public enum UserRole
+    {
+        Admin = 1,
+        Manager = 2,
+        WarehouseWorker = 3,
+        Viewer = 4
+    }
+
+    public static class UserRoleExtensions
+    {
+        public static string GetDisplayName(this UserRole role)
         {
             return role switch
             {
@@ -29,13 +46,5 @@ namespace SWM.Core.Models
                 _ => "Неизвестно"
             };
         }
-    }
-
-    public enum UserRole
-    {
-        Admin = 1,
-        Manager = 2,
-        WarehouseWorker = 3,
-        Viewer = 4
     }
 }
